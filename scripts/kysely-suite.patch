@@ -1,0 +1,38 @@
+diff --git a/test/node/src/test-setup.ts b/test/node/src/test-setup.ts
+index 85328bf..a4f7e57 100644
+--- a/test/node/src/test-setup.ts
++++ b/test/node/src/test-setup.ts
+@@ -8,6 +8,8 @@ import * as Tarn from 'tarn'
+ import * as Tedious from 'tedious'
+ import type { PoolOptions } from 'mysql2'
+ import { PGlite } from '@electric-sql/pglite'
++import { PostgrejsDialect } from 'kysely-postgrejs'
++import { Pool as PostgrejsPool } from 'postgrejs'
+ 
+ chai.use(chaiAsPromised)
+ 
+@@ -196,13 +198,18 @@ export const PG_ERRORS: Error[] = []
+ 
+ export const DB_CONFIGS: PerDialectVariant<KyselyConfig> = {
+   postgres: {
+-    dialect: new PostgresDialect({
+-      controlClient: Client,
++    // PATCHED: the postgres variant runs on kysely-postgrejs instead of
++    // the built-in pg dialect, so the whole suite exercises that driver.
++    dialect: new PostgrejsDialect({
+       pool: async () =>
+-        new Pool(DIALECT_CONFIGS.postgres).on('error', (error) =>
+-          PG_ERRORS.push(error),
+-        ),
+-      cursor: Cursor,
++        new PostgrejsPool({
++          host: DIALECT_CONFIGS.postgres.host,
++          port: DIALECT_CONFIGS.postgres.port,
++          user: DIALECT_CONFIGS.postgres.user,
++          password: DIALECT_CONFIGS.postgres.password,
++          database: DIALECT_CONFIGS.postgres.database,
++          max: POOL_SIZE,
++        }).on('error', (error: Error) => PG_ERRORS.push(error)),
+     }),
+     plugins: PLUGINS,
+   },

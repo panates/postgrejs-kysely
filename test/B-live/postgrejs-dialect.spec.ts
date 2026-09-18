@@ -361,4 +361,64 @@ describe('PostgrejsDialect (live)', () => {
       expect(rows).toStrictEqual([]);
     });
   });
+  describe('parameter types', () => {
+    // Everything here fails when a parameter's type is declared from its
+    // JavaScript value - the server needs to resolve it from context, the
+    // way it does for pg. Found by running Kysely's own dialect suite.
+    it('should let the server type a parameter going into a json column', async () => {
+      await sql`create temp table json_param_test (id int, doc json)`.execute(
+        db,
+      );
+      await sql`insert into json_param_test (id, doc) values (1, ${'{"a":1}'})`.execute(
+        db,
+      );
+      const result = await sql<{ doc: any }>`
+        select doc from json_param_test`.execute(db);
+      expect(result.rows[0].doc).toStrictEqual({ a: 1 });
+    });
+
+    it('should let the server unify the types of a coalesce', async () => {
+      const result = await sql<{ value: number }>`
+        select coalesce(${null}, ${5}) as value`.execute(db);
+      expect(Number(result.rows[0].value)).toStrictEqual(5);
+    });
+
+    it('should let the server resolve an overloaded operator', async () => {
+      const result = await sql<{ value: string }>`
+        select ${'a'} || ${'b'} as value`.execute(db);
+      expect(result.rows[0].value).toStrictEqual('ab');
+    });
+
+    it('should still declare types when inferParameterTypes is off', async () => {
+      const strict = new Kysely<TestDatabase>({
+        dialect: new PostgrejsDialect({
+          pool: new Pool({ max: 1 }),
+          inferParameterTypes: false,
+        }),
+      });
+      try {
+        await sql`create temp table json_param_test2 (doc json)`.execute(
+          strict,
+        );
+        await expect(
+          sql`insert into json_param_test2 (doc) values (${'{"a":1}'})`.execute(
+            strict,
+          ),
+        ).rejects.toThrow(/is of type json but expression is of type/);
+      } finally {
+        await strict.destroy();
+      }
+    });
+  });
+
+  describe('error stacks', () => {
+    it('should put the calling file on the stack of a failed query', async () => {
+      const error = await db
+        .selectFrom('no_such_table' as any)
+        .selectAll()
+        .execute()
+        .catch(e => e);
+      expect(error.stack).toContain('postgrejs-dialect.spec.ts');
+    });
+  });
 });

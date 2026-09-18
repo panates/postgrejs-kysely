@@ -4,7 +4,7 @@ import type {
   QueryId,
   QueryResult,
 } from 'kysely';
-import { Connection, type QueryOptions } from 'postgrejs';
+import { BindParam, Connection, type QueryOptions } from 'postgrejs';
 import { MAX_FETCH_COUNT } from './constants.js';
 import type { PostgrejsDialectConfig } from './postgrejs-dialect-config.js';
 
@@ -15,7 +15,11 @@ import type { PostgrejsDialectConfig } from './postgrejs-dialect-config.js';
  */
 export type PostgrejsConnectionOptions = Pick<
   PostgrejsDialectConfig,
-  'fetchCount' | 'prepare' | 'rollbackOnError' | 'typeMap'
+  | 'fetchCount'
+  | 'inferParameterTypes'
+  | 'prepare'
+  | 'rollbackOnError'
+  | 'typeMap'
 >;
 
 /**
@@ -27,6 +31,21 @@ export type PostgrejsConnectionOptions = Pick<
  * number simply does not reach us.
  */
 const AFFECTED_ROW_COMMANDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE']);
+
+/**
+ * Parameter type OID 0 - "I am not telling you, work it out from the
+ * query". PostgreSQL then resolves the parameter from where it appears.
+ */
+const UNSPECIFIED_OID = 0;
+
+/**
+ * The JavaScript types whose PostgreSQL type is better left to the
+ * server. Everything else - Date, Buffer, arrays, objects - keeps
+ * PostgreJS's own type determination and its binary encoders, which are
+ * both correct and faster, and where a value's text form is not something
+ * PostgreSQL could parse anyway.
+ */
+const INFERRED_PARAM_TYPES = new Set(['string', 'number', 'boolean', 'bigint']);
 
 /**
  * One PostgreJS connection, as Kysely's `DatabaseConnection`.
@@ -92,6 +111,10 @@ export class PostgrejsConnection implements DatabaseConnection {
         numAffectedRows:
           rowsAffected == null ? undefined : BigInt(rowsAffected),
       };
+    } catch (error) {
+      // The stack of an error from a pooled connection stops at the
+      // driver; this puts the call that asked for the query back on it.
+      throw extendStackTrace(error, new Error());
     } finally {
       this._inflightQueryId = undefined;
     }
@@ -188,10 +211,41 @@ export class PostgrejsConnection implements DatabaseConnection {
     return new Connection(this._connection.config);
   }
 
+  /**
+   * PostgreJS gives every parameter a type OID derived from its
+   * JavaScript value, and a string becomes `varchar`. That is a
+   * declaration, not a hint: `insert into t (json_column) values ($1)`
+   * then fails with "column is of type json but expression is of type
+   * character varying", and so do `coalesce($1, 1)`, `$1 || x`, and any
+   * call to an overloaded function. `pg` sends type 0 - unspecified - and
+   * lets PostgreSQL resolve each parameter from where it appears, which
+   * is why none of that surfaces there.
+   *
+   * Wrapping a value in a `BindParam` of OID 0 asks PostgreJS for the
+   * same thing: type 0 in Parse, and the value as text in Bind. Set
+   * `inferParameterTypes: false` to go back to declaring types.
+   */
+  protected _params(parameters: readonly unknown[]): unknown[] {
+    if (this._config.inferParameterTypes === false)
+      return parameters as unknown[];
+    const l = parameters.length;
+    const params = new Array(l);
+    let i: number;
+    let value: unknown;
+    for (i = 0; i < l; i++) {
+      value = parameters[i];
+      params[i] =
+        value == null || INFERRED_PARAM_TYPES.has(typeof value)
+          ? new BindParam(UNSPECIFIED_OID, value)
+          : value;
+    }
+    return params;
+  }
+
   protected _queryOptions(compiledQuery: CompiledQuery): QueryOptions {
     const config = this._config;
     return {
-      params: compiledQuery.parameters as any[],
+      params: this._params(compiledQuery.parameters),
       // Kysely reads rows as objects; PostgreJS hands out arrays of
       // values unless told otherwise.
       rowDecoder: 'object',
@@ -203,4 +257,24 @@ export class PostgrejsConnection implements DatabaseConnection {
       typeMap: config.typeMap,
     };
   }
+}
+
+/**
+ * Kysely's own `extendStackTrace`, which it does not export: an error
+ * thrown from inside a pooled connection carries the driver's stack, not
+ * the caller's, and this appends the one captured where the query was
+ * issued.
+ */
+function extendStackTrace(error: unknown, stackError: Error): unknown {
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    typeof (error as { stack?: unknown }).stack === 'string' &&
+    stackError.stack
+  ) {
+    const holder = error as { stack: string };
+    // The first line is just "Error", which would read as a second error.
+    holder.stack += '\n' + stackError.stack.split('\n').slice(1).join('\n');
+  }
+  return error;
 }

@@ -14,6 +14,21 @@ export interface PostgrejsDialectConfig {
   fetchCount?: number;
 
   /**
+   * Whether each parameter's PostgreSQL type is left to the server to
+   * resolve from where it appears in the query - what `pg` does, and what
+   * Kysely's users therefore expect.
+   *
+   * Defaults to `true`. PostgreJS otherwise declares a type derived from
+   * the JavaScript value, which makes a string a `varchar` and breaks
+   * every context where PostgreSQL would have inferred something else: a
+   * `json` column, a `coalesce` of mixed types, `||`, an overloaded
+   * function. Only strings, numbers, booleans, bigints and nulls are
+   * affected - dates, buffers, arrays and objects keep PostgreJS's typed,
+   * binary encoding either way.
+   */
+  inferParameterTypes?: boolean;
+
+  /**
    * Called once for each physical connection the pool opens, before it is
    * first handed to Kysely.
    *

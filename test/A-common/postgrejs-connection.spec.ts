@@ -1,6 +1,7 @@
 import { expect } from 'expect';
 import { CompiledQuery } from 'kysely';
 import type { Connection } from 'postgrejs';
+import { BindParam } from 'postgrejs';
 import { MAX_FETCH_COUNT } from '../../src/constants.js';
 import type { PostgrejsConnectionOptions } from '../../src/postgrejs-connection.js';
 import { PostgrejsConnection } from '../../src/postgrejs-connection.js';
@@ -50,7 +51,9 @@ describe('PostgrejsConnection', () => {
       );
       const { sql, options } = fake.queries[0];
       expect(sql).toStrictEqual('select * from t where a = $1 and b = $2');
-      expect(options?.params).toStrictEqual([1, 'x']);
+      expect(
+        options?.params?.map((param: BindParam) => param.value),
+      ).toStrictEqual([1, 'x']);
       expect(options?.rowDecoder).toStrictEqual('object');
     });
 
@@ -204,6 +207,99 @@ describe('PostgrejsConnection', () => {
         ).rejects.toThrow('chunkSize must be a positive integer');
       }
       expect(fake.calls).toStrictEqual([]);
+    });
+  });
+
+  describe('parameter types', () => {
+    async function paramsOf(
+      values: unknown[],
+      config: PostgrejsConnectionOptions = {},
+    ): Promise<any[]> {
+      const fake = new FakeConnection();
+      const connection = new PostgrejsConnection(fake.asConnection(), config);
+      await connection.executeQuery(CompiledQuery.raw('select $1', values));
+      return fake.queries[0].options?.params as any[];
+    }
+
+    it('should leave a value PostgreSQL can resolve itself unspecified', async () => {
+      // OID 0 in Parse is what pg sends: the server then types the
+      // parameter from where it appears, instead of being told it is a
+      // varchar because the value happened to be a JavaScript string.
+      const params = await paramsOf(['x', 1, true, 10n, null, undefined]);
+      expect(params.map(param => param instanceof BindParam)).toStrictEqual([
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+      ]);
+      expect(params.map(param => param.oid)).toStrictEqual([0, 0, 0, 0, 0, 0]);
+      expect(params.map(param => param.value)).toStrictEqual([
+        'x',
+        1,
+        true,
+        10n,
+        null,
+        undefined,
+      ]);
+    });
+
+    it('should leave values PostgreJS encodes better alone', async () => {
+      // A date, a buffer, an array or an object has no text form the
+      // server could parse out of context - these keep PostgreJS's typed
+      // binary encoding.
+      const date = new Date();
+      const buffer = Buffer.from([1, 2]);
+      const array = [1, 2];
+      const object = { a: 1 };
+      const params = await paramsOf([date, buffer, array, object]);
+      expect(params).toStrictEqual([date, buffer, array, object]);
+    });
+
+    it('should declare types again when inferParameterTypes is off', async () => {
+      const params = await paramsOf(['x', 1], { inferParameterTypes: false });
+      expect(params).toStrictEqual(['x', 1]);
+    });
+  });
+
+  describe('error stacks', () => {
+    it('should append the caller stack to the error', async () => {
+      const fake = new FakeConnection();
+      const error: any = new Error('boom');
+      error.stack = 'Error: boom\n    at the-driver';
+      fake.queryResult = error;
+      const connection = new PostgrejsConnection(fake.asConnection(), {});
+      const thrown: any = await connection
+        .executeQuery(CompiledQuery.raw('select 1'))
+        .catch(e => e);
+      expect(thrown).toBe(error);
+      expect(thrown.stack).toContain('at the-driver');
+      expect(thrown.stack).toContain('postgrejs-connection.spec.ts');
+    });
+
+    it('should rethrow something that was never an error unchanged', async () => {
+      const fake = new FakeConnection();
+      fake.queryResult = () => {
+        throw 'a string, thrown';
+      };
+      const connection = new PostgrejsConnection(fake.asConnection(), {});
+      const thrown = await connection
+        .executeQuery(CompiledQuery.raw('select 1'))
+        .catch(e => e);
+      expect(thrown).toStrictEqual('a string, thrown');
+    });
+
+    it('should leave an error with no stack alone', async () => {
+      const fake = new FakeConnection();
+      const error: any = new Error('boom');
+      error.stack = undefined;
+      fake.queryResult = error;
+      const connection = new PostgrejsConnection(fake.asConnection(), {});
+      const thrown = await connection
+        .executeQuery(CompiledQuery.raw('select 1'))
+        .catch(e => e);
+      expect(thrown).toBe(error);
     });
   });
 

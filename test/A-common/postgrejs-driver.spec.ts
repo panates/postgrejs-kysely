@@ -1,6 +1,7 @@
 import { expect } from 'expect';
 import type { DatabaseConnection } from 'kysely';
 import { PostgrejsConnection } from '../../src/postgrejs-connection.js';
+import { PostgrejsDialect } from '../../src/postgrejs-dialect.js';
 import { PostgrejsDriver } from '../../src/postgrejs-driver.js';
 import { FakeConnection, FakePool } from '../_support/fakes.js';
 
@@ -119,15 +120,18 @@ describe('PostgrejsDriver', () => {
   });
 
   describe('transactions', () => {
-    it('should begin a plain transaction through PostgreJS', async () => {
+    it('should begin a plain transaction as a statement Kysely can see', async () => {
+      // Not PostgreJS's startTransaction(): Kysely wraps logging around
+      // executeQuery, so a BEGIN sent any other way is invisible to it.
       const pool = new FakePool();
       const driver = new PostgrejsDriver({ pool: pool.asPool() });
       await driver.init();
       const { connection, fake } = await acquire(driver);
       await driver.beginTransaction(connection, {});
-      expect(fake.calls).toStrictEqual([
-        { method: 'startTransaction', args: [] },
-      ]);
+      expect(fake.queries.map(query => query.sql)).toStrictEqual(['begin']);
+      expect(
+        fake.calls.some(call => call.method === 'startTransaction'),
+      ).toStrictEqual(false);
     });
 
     it('should spell out a transaction that carries settings', async () => {
@@ -170,35 +174,48 @@ describe('PostgrejsDriver', () => {
       expect(fake.queries[0].sql).toStrictEqual('start transaction read write');
     });
 
-    it('should commit and roll back through PostgreJS', async () => {
+    it('should commit and roll back as statements Kysely can see', async () => {
       const pool = new FakePool();
       const driver = new PostgrejsDriver({ pool: pool.asPool() });
       await driver.init();
       const { connection, fake } = await acquire(driver);
       await driver.commitTransaction(connection);
       await driver.rollbackTransaction(connection);
-      expect(fake.calls).toStrictEqual([
-        { method: 'commit', args: [] },
-        { method: 'rollback', args: [] },
+      expect(fake.queries.map(query => query.sql)).toStrictEqual([
+        'commit',
+        'rollback',
       ]);
+      expect(
+        fake.calls.some(
+          call => call.method === 'commit' || call.method === 'rollback',
+        ),
+      ).toStrictEqual(false);
     });
 
-    it('should drive savepoints through PostgreJS rather than compiled SQL', async () => {
+    it('should compile savepoint commands, quoting the name', async () => {
+      // PostgreJS's own savepoint(name) would take a different route past
+      // Kysely's logging, and would reject any name outside
+      // /^[a-zA-Z]\w+$/ - where Kysely, like pg, quotes whatever it is
+      // given.
       const pool = new FakePool();
       const driver = new PostgrejsDriver({ pool: pool.asPool() });
       await driver.init();
       const { connection, fake } = await acquire(driver);
-      const compileQuery = () => {
-        throw new Error('compileQuery must not be used');
-      };
-      await driver.savepoint(connection, 'sp1', compileQuery as any);
-      await driver.rollbackToSavepoint(connection, 'sp1', compileQuery as any);
-      await driver.releaseSavepoint(connection, 'sp1', compileQuery as any);
-      expect(fake.calls).toStrictEqual([
-        { method: 'savepoint', args: ['sp1'] },
-        { method: 'rollbackToSavepoint', args: ['sp1'] },
-        { method: 'releaseSavepoint', args: ['sp1'] },
+      const compiler = new PostgrejsDialect({
+        pool: pool.asPool(),
+      }).createQueryCompiler();
+      const compileQuery = compiler.compileQuery.bind(compiler);
+      await driver.savepoint(connection, 'a weird "name"', compileQuery);
+      await driver.rollbackToSavepoint(connection, 'sp1', compileQuery);
+      await driver.releaseSavepoint(connection, 'sp1', compileQuery);
+      expect(fake.queries.map(query => query.sql)).toStrictEqual([
+        'savepoint "a weird ""name"""',
+        'rollback to "sp1"',
+        'release "sp1"',
       ]);
+      expect(
+        fake.calls.some(call => call.method === 'savepoint'),
+      ).toStrictEqual(false);
     });
 
     it('should refuse a connection it did not create', async () => {
@@ -206,7 +223,7 @@ describe('PostgrejsDriver', () => {
       const driver = new PostgrejsDriver({ pool: pool.asPool() });
       await driver.init();
       const foreign = {} as DatabaseConnection;
-      await expect(driver.commitTransaction(foreign)).rejects.toThrow(
+      await expect(driver.releaseConnection(foreign)).rejects.toThrow(
         'Connection was not created by PostgrejsDriver',
       );
     });

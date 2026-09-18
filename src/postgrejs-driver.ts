@@ -1,8 +1,12 @@
 import {
   type AbortableOperationOptions,
   CompiledQuery,
+  createQueryId,
   type DatabaseConnection,
   type Driver,
+  IdentifierNode,
+  type QueryCompiler,
+  RawNode,
   type TransactionSettings,
 } from 'kysely';
 import type { Pool } from 'postgrejs';
@@ -61,69 +65,75 @@ export class PostgrejsDriver implements Driver {
     return connection;
   }
 
+  /**
+   * Every transaction and savepoint command goes through the connection's
+   * own `executeQuery` rather than PostgreJS's same-named primitives -
+   * `startTransaction()`, `commit()`, `savepoint(name)` and the rest.
+   *
+   * That seam is where Kysely wraps logging: `RuntimeDriver` patches
+   * `executeQuery` on each connection it hands out, so a BEGIN sent any
+   * other way never reaches the `log` callback, `db.on('query')`, or
+   * anything else built on it - it simply does not exist as far as Kysely
+   * is concerned. Kysely's own dialect test suite asserts the full list
+   * of statements a transaction runs, and running the primitives instead
+   * fails around two dozen of those cases.
+   *
+   * Nothing is lost by going through SQL. PostgreJS reads `inTransaction`
+   * from the server's own transaction status rather than from the depth
+   * counter its primitives keep, and recognises BEGIN/COMMIT/SAVEPOINT in
+   * a statement, so its bookkeeping stays in step either way. Savepoint
+   * names also stop being restricted to PostgreJS's `/^[a-zA-Z]\w+$/`:
+   * Kysely compiles the name as a quoted identifier, as `pg` does.
+   */
   async beginTransaction(
     connection: DatabaseConnection,
     settings: TransactionSettings,
   ): Promise<void> {
     const { isolationLevel, accessMode } = settings;
-    if (!isolationLevel && !accessMode) {
-      await assertPostgrejsConnection(connection).connection.startTransaction();
-      return;
+    let sql = 'begin';
+    if (isolationLevel || accessMode) {
+      sql = 'start transaction';
+      if (isolationLevel) sql += ` isolation level ${isolationLevel}`;
+      if (accessMode) sql += ` ${accessMode}`;
     }
-    // PostgreJS only ever sends a bare BEGIN, so anything with settings on
-    // it is spelled out here. Its bookkeeping still follows: `commit()`
-    // and `rollback()` below decide what to send from the server's own
-    // transaction status, not from a depth counter this bypasses.
-    let sql = 'start transaction';
-    if (isolationLevel) sql += ` isolation level ${isolationLevel}`;
-    if (accessMode) sql += ` ${accessMode}`;
     await connection.executeQuery(CompiledQuery.raw(sql));
   }
 
   async commitTransaction(connection: DatabaseConnection): Promise<void> {
-    await assertPostgrejsConnection(connection).connection.commit();
+    await connection.executeQuery(CompiledQuery.raw('commit'));
   }
 
   async rollbackTransaction(connection: DatabaseConnection): Promise<void> {
-    await assertPostgrejsConnection(connection).connection.rollback();
+    await connection.executeQuery(CompiledQuery.raw('rollback'));
   }
 
-  /**
-   * The three savepoint methods go through PostgreJS's own primitives
-   * rather than the `compileQuery` Kysely offers, which is why that
-   * argument is left out of their signatures: PostgreJS tracks savepoints
-   * per name, and SQL sent behind its back would desynchronise that
-   * bookkeeping from the server.
-   *
-   * The trade-off is PostgreJS's stricter idea of a name: it accepts
-   * `/^[a-zA-Z]\w+$/` and rejects the rest, where Kysely quotes whatever
-   * it is given. A leading underscore, a dash, or a single-character name
-   * therefore throws here and would not through `pg`.
-   */
   async savepoint(
     connection: DatabaseConnection,
     savepointName: string,
+    compileQuery: QueryCompiler['compileQuery'],
   ): Promise<void> {
-    await assertPostgrejsConnection(connection).connection.savepoint(
-      savepointName,
+    await connection.executeQuery(
+      compileSavepointCommand('savepoint', savepointName, compileQuery),
     );
   }
 
   async rollbackToSavepoint(
     connection: DatabaseConnection,
     savepointName: string,
+    compileQuery: QueryCompiler['compileQuery'],
   ): Promise<void> {
-    await assertPostgrejsConnection(connection).connection.rollbackToSavepoint(
-      savepointName,
+    await connection.executeQuery(
+      compileSavepointCommand('rollback to', savepointName, compileQuery),
     );
   }
 
   async releaseSavepoint(
     connection: DatabaseConnection,
     savepointName: string,
+    compileQuery: QueryCompiler['compileQuery'],
   ): Promise<void> {
-    await assertPostgrejsConnection(connection).connection.releaseSavepoint(
-      savepointName,
+    await connection.executeQuery(
+      compileSavepointCommand('release', savepointName, compileQuery),
     );
   }
 
@@ -146,6 +156,26 @@ export class PostgrejsDriver implements Driver {
       throw new Error('Driver is not initialized. Did you call init()?');
     return this._pool;
   }
+}
+
+/**
+ * A savepoint command as Kysely's own dialects build it: the name goes
+ * through the dialect's compiler as an identifier, so it is quoted rather
+ * than pasted into the SQL. Kysely keeps its `parseSavepointCommand`
+ * internal, so the two nodes it makes are spelled out here.
+ */
+function compileSavepointCommand(
+  command: string,
+  savepointName: string,
+  compileQuery: QueryCompiler['compileQuery'],
+): CompiledQuery {
+  return compileQuery(
+    RawNode.createWithChildren([
+      RawNode.createWithSql(`${command} `),
+      IdentifierNode.create(savepointName),
+    ]),
+    createQueryId(),
+  );
 }
 
 /**
