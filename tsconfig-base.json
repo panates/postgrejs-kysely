@@ -1,0 +1,7 @@
+{
+  "extends": "@panates/tsconfig/node.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "sourceMap": true
+  }
+}

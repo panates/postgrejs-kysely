@@ -1,0 +1,8 @@
+/node_modules
+/build
+/coverage
+/.idea
+/.husky
+/.DS_Store
+/.github
+**/*.md

@@ -1,0 +1,10 @@
+{
+  "extends": ["./tsconfig-base.json", "@panates/tsconfig/build.json"],
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "outDir": "build"
+  },
+  "include": ["src"]
+}
