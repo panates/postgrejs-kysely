@@ -31,6 +31,30 @@ const db = new Kysely<Database>({
 `pool` takes a `Pool` instance, or an async function returning one - it is called once, when the
 driver initialises. `db.destroy()` closes the pool.
 
+Streaming goes through a server-side cursor, with Kysely's chunk size as the cursor's batch size:
+
+```ts
+for await (const person of db.selectFrom('person').selectAll().stream(100)) {
+  // one round trip per 100 rows; the cursor closes when the loop ends,
+  // whether it runs out, breaks, or throws
+}
+```
+
+Everything Kysely's interface does not reach - COPY, LISTEN/NOTIFY, large objects, logical
+replication - is still there on the PostgreJS connection underneath, which the two hooks hand you:
+
+```ts
+new PostgrejsDialect({
+  pool,
+  onCreateConnection: async (connection) => {
+    const postgrejs = (connection as PostgrejsConnection).connection;
+    await postgrejs.query(`set application_name = 'reports'`);
+  },
+});
+```
+
+The pool you passed in is of course still yours to `acquire()` from directly as well.
+
 ## Config
 
 | Option                | Default           | What it does                                                                              |
@@ -115,7 +139,7 @@ is involved.
 
 ## Kysely's own test suite
 
-Kysely holds its dialects to a suite of some 680 tests. `scripts/run-kysely-suite.sh` checks Kysely
+Kysely holds its dialects to a suite of several hundred tests. `scripts/run-kysely-suite.sh` checks Kysely
 out at a known version, points its `postgres` variant at this dialect instead of the built-in `pg`
 one, and runs all of it:
 
@@ -123,7 +147,8 @@ one, and runs all of it:
 scripts/run-kysely-suite.sh
 ```
 
-Against Kysely v0.29.6: **654 passing, 30 failing**, and every failure is accounted for:
+Against Kysely v0.29.6: **654 passing, 30 failing**. Against v0.30.0-beta.2, the other end of the
+peer range: **698 passing, the same 30 failing**. Every failure is accounted for:
 
 | Failures | What                                                                    | Whose                                                     |
 | -------- | ----------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -132,17 +157,54 @@ Against Kysely v0.29.6: **654 passing, 30 failing**, and every failure is accoun
 | 2        | the error is not an instance of `pg`'s `DatabaseError`, and a test stubs `PostgresDriver.prototype` | the suite identifying the `pg` driver       |
 | 1        | a pool error is not `pg`'s "Connection terminated unexpectedly"           | the same                                                    |
 
+A weekly CI job re-runs both, and fails if that count moves in either direction - the failures are
+known, so what matters is whether the set of them changed.
+
 The suite is also what settled two design questions. Transaction and savepoint commands go through
 `connection.executeQuery` rather than PostgreJS's primitives, because that is the seam Kysely wraps
 its logging around - two dozen tests assert the exact statements a transaction runs. And parameter
 types are left to the server, because a declared type breaks every context PostgreSQL would have
 inferred.
 
+## Use from a MikroORM driver
+
+MikroORM's SQL layer runs on Kysely, so a custom driver only has to hand this dialect over:
+
+```ts
+import { PostgrejsDialect } from 'kysely-postgrejs';
+
+class PostgrejsSqlConnection extends AbstractSqlConnection {
+  createKyselyDialect() {
+    // `pool` being whichever PostgreJS pool the driver manages
+    return new PostgrejsDialect({ pool });
+  }
+}
+```
+
+Nothing the dialect needs is behind a deep import: `PostgrejsDialect`, `PostgrejsDriver`,
+`PostgrejsConnection` and the config types are all exported from the package root.
+
+## Development
+
+The unit tests need nothing; the live ones need a PostgreSQL at `127.0.0.1:5432`
+(`postgres`/`postgres`, database `postgres`), which `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` and
+`PGDATABASE` override.
+
+```sh
+npm test          # unit + live tests
+npm run citest    # the same, with coverage
+npm run qc        # lint and circular dependency check
+npm run compile   # type check without emitting
+
+scripts/run-kysely-suite.sh   # Kysely's own suite, on its own database
+```
+
 ## Status
 
-Under construction. The dialect runs Kysely's query builder, transactions, savepoints, streaming,
-introspection and both in-flight abort strategies, and passes Kysely's own dialect suite except for
-the rows above.
+Pre-1.0, and complete enough to use: the query builder, transactions, savepoints, streaming,
+introspection and both in-flight abort strategies all work against a live server, and Kysely's own
+dialect suite passes except for the rows above. The one real gap is `numAffectedRows` for `merge`,
+which needs a fix in PostgreJS.
 
 ## License
 

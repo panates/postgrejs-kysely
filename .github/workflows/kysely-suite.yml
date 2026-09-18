@@ -1,0 +1,48 @@
+name: Kysely dialect suite
+on:
+  # Can be run manually
+  workflow_dispatch:
+
+  # Weekly, to notice a change in Kysely rather than in this repository
+  schedule:
+    - cron: '0 6 * * 1'
+
+# Only one run at a time
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: Kysely ${{ matrix.kysely }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of the peer range. The failure counts are the ones the
+        # README explains; a change in either is what this job is for.
+        include:
+          - kysely: v0.29.6
+            expected-failures: 30
+          - kysely: v0.30.0-beta.2
+            expected-failures: 30
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: panates/gh-setup-node@v1
+        with:
+          node-version: '22'
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Run Kysely's dialect suite against this dialect
+        run: scripts/run-kysely-suite.sh
+        env:
+          KYSELY_VERSION: ${{ matrix.kysely }}
+          EXPECTED_FAILURES: ${{ matrix.expected-failures }}
+          WORK_DIR: ${{ runner.temp }}/kysely-suite

@@ -15,8 +15,12 @@
 #   docker compose -f "$WORK_DIR/kysely/docker-compose.yml" down
 #
 # Usage: scripts/run-kysely-suite.sh
-#   KYSELY_VERSION  git tag to test against  (default: v0.29.6)
-#   WORK_DIR        where the checkout lives (default: $TMPDIR/kysely-postgrejs-suite)
+#   KYSELY_VERSION     git tag to test against  (default: v0.29.6)
+#   WORK_DIR           where the checkout lives (default: $TMPDIR/kysely-postgrejs-suite)
+#   EXPECTED_FAILURES  when set, succeed only if exactly this many tests
+#                      fail - the failures Kysely's suite has against this
+#                      dialect are known and listed in the README, so what
+#                      matters in CI is whether that number moved
 set -euo pipefail
 
 KYSELY_VERSION="${KYSELY_VERSION:-v0.29.6}"
@@ -84,4 +88,21 @@ ln -sfn "$REPO_DIR/node_modules/postgrejs" "$KYSELY_DIR/node_modules/postgrejs"
 say "Running the suite"
 cd "$KYSELY_DIR"
 DIALECTS=postgres "${PNPM[@]}" test:node:build
-DIALECTS=postgres "${PNPM[@]}" test:node:run
+
+set +e
+DIALECTS=postgres "${PNPM[@]}" test:node:run 2>&1 | tee "$WORK_DIR/suite.log"
+status=${PIPESTATUS[0]}
+set -e
+
+if [ -z "${EXPECTED_FAILURES:-}" ]; then
+  exit "$status"
+fi
+
+failing="$(sed -n 's/^ *\([0-9][0-9]*\) failing.*/\1/p' "$WORK_DIR/suite.log" | tail -1)"
+failing="${failing:-0}"
+say "$failing failing, $EXPECTED_FAILURES expected"
+if [ "$failing" != "$EXPECTED_FAILURES" ]; then
+  echo "The set of failures moved. Go through them and update both the" >&2
+  echo "README table and EXPECTED_FAILURES, or fix what regressed." >&2
+  exit 1
+fi
