@@ -271,4 +271,94 @@ describe('PostgrejsDialect (live)', () => {
       'name',
     ]);
   });
+  describe('aborting an in-flight query', () => {
+    /** Backends sitting in a pg_sleep(), other than the one asking. */
+    async function sleepingBackends(): Promise<number[]> {
+      const result = await sql<{ pid: number }>`
+        select pid from pg_stat_activity
+        where query like 'select pg_sleep%' and pid <> pg_backend_pid()`.execute(
+        db,
+      );
+      return result.rows.map(row => row.pid);
+    }
+
+    async function backendExists(pid: number): Promise<boolean> {
+      const result = await sql`
+        select 1 from pg_stat_activity where pid = ${pid}`.execute(db);
+      return result.rows.length > 0;
+    }
+
+    /** Polls until `check` holds - the server acts on its own schedule. */
+    async function waitUntil(
+      check: () => Promise<boolean>,
+      what: string,
+      timeoutMs = 10000,
+    ): Promise<void> {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (await check()) return;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error(`Timed out waiting for ${what}`);
+    }
+
+    /** Starts a query that will not finish on its own. */
+    async function startSleepingQuery(
+      signal: AbortSignal,
+      inflightQueryAbortStrategy: 'cancel query' | 'kill session',
+    ): Promise<{ promise: Promise<unknown>; pid: number }> {
+      const promise = sql`select pg_sleep(10)`
+        .execute(db, { signal, inflightQueryAbortStrategy })
+        .catch(error => error);
+      await waitUntil(
+        async () => (await sleepingBackends()).length === 1,
+        'the query to reach the server',
+      );
+      const [pid] = await sleepingBackends();
+      return { promise, pid };
+    }
+
+    afterEach(async () => {
+      // A test that failed halfway would otherwise leave a backend
+      // sleeping for the next one to trip over.
+      for (const pid of await sleepingBackends()) {
+        await sql`select pg_terminate_backend(${pid})`.execute(db);
+      }
+    });
+
+    it('should cancel the statement and keep the connection for the cancel strategy', async () => {
+      const controller = new AbortController();
+      const { promise, pid } = await startSleepingQuery(
+        controller.signal,
+        'cancel query',
+      );
+      controller.abort();
+      expect(await promise).toBeInstanceOf(Error);
+      await waitUntil(
+        async () => !(await sleepingBackends()).includes(pid),
+        'the statement to stop running',
+      );
+      // Cancelling ends the statement, not the session.
+      expect(await backendExists(pid)).toStrictEqual(true);
+    });
+
+    it('should terminate the backend for the kill strategy, and leave a working pool', async () => {
+      const controller = new AbortController();
+      const { promise, pid } = await startSleepingQuery(
+        controller.signal,
+        'kill session',
+      );
+      controller.abort();
+      expect(await promise).toBeInstanceOf(Error);
+      await waitUntil(
+        async () => !(await backendExists(pid)),
+        'the backend to be terminated',
+      );
+      const rows = await db
+        .selectFrom('kysely_postgrejs_test')
+        .selectAll()
+        .execute();
+      expect(rows).toStrictEqual([]);
+    });
+  });
 });

@@ -1,8 +1,32 @@
 import { expect } from 'expect';
 import { CompiledQuery } from 'kysely';
+import type { Connection } from 'postgrejs';
 import { MAX_FETCH_COUNT } from '../../src/constants.js';
+import type { PostgrejsConnectionOptions } from '../../src/postgrejs-connection.js';
 import { PostgrejsConnection } from '../../src/postgrejs-connection.js';
-import { FakeConnection, FakeCursor } from '../_support/fakes.js';
+import { deferred, FakeConnection, FakeCursor } from '../_support/fakes.js';
+
+/** Hands out fake control connections, and keeps them for inspection. */
+class TestConnection extends PostgrejsConnection {
+  readonly controlConnections: FakeConnection[] = [];
+  protected readonly _controlOptions: { connectGate?: Promise<void> };
+
+  constructor(
+    connection: Connection,
+    config: PostgrejsConnectionOptions,
+    controlOptions: { connectGate?: Promise<void> } = {},
+  ) {
+    super(connection, config);
+    this._controlOptions = controlOptions;
+  }
+
+  protected override _createControlConnection(): Connection {
+    const control = new FakeConnection();
+    control.connectGate = this._controlOptions.connectGate;
+    this.controlConnections.push(control);
+    return control.asConnection();
+  }
+}
 
 describe('PostgrejsConnection', () => {
   describe('executeQuery()', () => {
@@ -180,6 +204,100 @@ describe('PostgrejsConnection', () => {
         ).rejects.toThrow('chunkSize must be a positive integer');
       }
       expect(fake.calls).toStrictEqual([]);
+    });
+  });
+
+  describe('cancelQuery()', () => {
+    it('should cancel the statement the connection is running', async () => {
+      const fake = new FakeConnection();
+      const gate = deferred();
+      fake.queryGate = gate.promise;
+      const connection = new PostgrejsConnection(fake.asConnection(), {});
+      const pending = connection.executeQuery(
+        CompiledQuery.raw('select pg_sleep(60)'),
+      );
+      await connection.cancelQuery();
+      expect(fake.calls.filter(call => call.method === 'cancel')).toHaveLength(
+        1,
+      );
+      gate.resolve();
+      await pending;
+    });
+
+    it('should do nothing when no statement is in flight', async () => {
+      const fake = new FakeConnection();
+      const connection = new PostgrejsConnection(fake.asConnection(), {});
+      await connection.cancelQuery();
+      await connection.executeQuery(CompiledQuery.raw('select 1'));
+      // A cancel after the query settled would reach whatever the
+      // connection does next.
+      await connection.cancelQuery();
+      expect(fake.calls.filter(call => call.method === 'cancel')).toStrictEqual(
+        [],
+      );
+    });
+  });
+
+  describe('killSession()', () => {
+    it('should terminate the backend from a session of its own', async () => {
+      const fake = new FakeConnection(4242);
+      const gate = deferred();
+      fake.queryGate = gate.promise;
+      const connection = new TestConnection(fake.asConnection(), {});
+      const pending = connection.executeQuery(
+        CompiledQuery.raw('select pg_sleep(60)'),
+      );
+      await connection.killSession();
+      expect(connection.controlConnections).toHaveLength(1);
+      const control = connection.controlConnections[0];
+      expect(control.calls.map(call => call.method)).toStrictEqual([
+        'connect',
+        'query',
+        'close',
+      ]);
+      expect(control.queries[0].sql).toStrictEqual(
+        'select pg_terminate_backend($1)',
+      );
+      expect(control.queries[0].options?.params).toStrictEqual([4242]);
+      gate.resolve();
+      await pending;
+    });
+
+    it('should do nothing when no statement is in flight', async () => {
+      const fake = new FakeConnection(4242);
+      const connection = new TestConnection(fake.asConnection(), {});
+      await connection.killSession();
+      expect(connection.controlConnections).toStrictEqual([]);
+    });
+
+    it('should not kill a backend whose query finished while it was connecting', async () => {
+      // Opening the second session takes a moment, and a query that ends
+      // in it leaves a connection doing someone else's work - which is
+      // what would get terminated.
+      const fake = new FakeConnection(4242);
+      const queryGate = deferred();
+      const connectGate = deferred();
+      fake.queryGate = queryGate.promise;
+      const connection = new TestConnection(
+        fake.asConnection(),
+        {},
+        {
+          connectGate: connectGate.promise,
+        },
+      );
+      const pending = connection.executeQuery(
+        CompiledQuery.raw('select pg_sleep(60)'),
+      );
+      const killing = connection.killSession();
+      queryGate.resolve();
+      await pending;
+      connectGate.resolve();
+      await killing;
+      const control = connection.controlConnections[0];
+      expect(control.calls.map(call => call.method)).toStrictEqual([
+        'connect',
+        'close',
+      ]);
     });
   });
 

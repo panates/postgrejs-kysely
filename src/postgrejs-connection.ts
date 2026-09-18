@@ -1,5 +1,10 @@
-import type { CompiledQuery, DatabaseConnection, QueryResult } from 'kysely';
-import type { Connection, QueryOptions } from 'postgrejs';
+import type {
+  CompiledQuery,
+  DatabaseConnection,
+  QueryId,
+  QueryResult,
+} from 'kysely';
+import { Connection, type QueryOptions } from 'postgrejs';
 import { MAX_FETCH_COUNT } from './constants.js';
 import type { PostgrejsDialectConfig } from './postgrejs-dialect-config.js';
 
@@ -30,19 +35,32 @@ const AFFECTED_ROW_COMMANDS = new Set(['INSERT', 'UPDATE', 'DELETE', 'MERGE']);
  * `Connection` facade over the same physical connection every time, so
  * there is nothing stable to cache these on.
  *
- * Neither method takes Kysely's `AbortableOperationOptions`, and that is
- * deliberate rather than an omission: Kysely races the query against the
- * signal itself, and what happens to the statement still running on the
- * server is chosen by the caller's `inflightQueryAbortStrategy`, through
- * the optional `cancelQuery`/`killSession` methods. Handing the signal
- * down to PostgreJS - which cancels the statement out of band - would
- * silently make every abort behave like `'cancel query'`, whatever the
- * caller asked for. Kysely's own `pg` dialect ignores the argument for
- * the same reason.
+ * Neither `executeQuery` nor `streamQuery` takes Kysely's
+ * `AbortableOperationOptions`, and that is deliberate rather than an
+ * omission: Kysely races the query against the signal itself, and what
+ * happens to the statement still running on the server is the caller's
+ * choice, made through `inflightQueryAbortStrategy` and carried out by
+ * `cancelQuery`/`killSession` below. Handing the signal down to PostgreJS
+ * - which cancels the statement out of band - would silently make every
+ * abort behave like `'cancel query'`, whatever the caller asked for.
+ * Kysely's own `pg` dialect ignores the argument for the same reason.
+ *
+ * `collectSessionInfo` is not implemented, also deliberately: it exists
+ * so a dialect can go and find the session's own backend process id
+ * before a query starts, and PostgreJS already knows it - skipping the
+ * hook saves the round trip Kysely's `pg` dialect spends on
+ * `pg_backend_pid()`.
  */
 export class PostgrejsConnection implements DatabaseConnection {
   protected readonly _connection: Connection;
   protected readonly _config: PostgrejsConnectionOptions;
+  /**
+   * The query `executeQuery` is waiting on, if any. Both abort handlers
+   * are no-ops without one: a cancel that arrives after its query
+   * finished is harmless, but `killSession` would otherwise take down a
+   * connection that has already gone back to doing someone else's work.
+   */
+  protected _inflightQueryId?: QueryId;
 
   constructor(connection: Connection, config: PostgrejsConnectionOptions) {
     this._connection = connection;
@@ -59,18 +77,24 @@ export class PostgrejsConnection implements DatabaseConnection {
   }
 
   async executeQuery<R>(compiledQuery: CompiledQuery): Promise<QueryResult<R>> {
-    const result = await this._connection.query(
-      compiledQuery.sql,
-      this._queryOptions(compiledQuery),
-    );
-    const rowsAffected =
-      result.command && AFFECTED_ROW_COMMANDS.has(result.command)
-        ? result.rowsAffected
-        : undefined;
-    return {
-      rows: (result.rows || []) as R[],
-      numAffectedRows: rowsAffected == null ? undefined : BigInt(rowsAffected),
-    };
+    this._inflightQueryId = compiledQuery.queryId;
+    try {
+      const result = await this._connection.query(
+        compiledQuery.sql,
+        this._queryOptions(compiledQuery),
+      );
+      const rowsAffected =
+        result.command && AFFECTED_ROW_COMMANDS.has(result.command)
+          ? result.rowsAffected
+          : undefined;
+      return {
+        rows: (result.rows || []) as R[],
+        numAffectedRows:
+          rowsAffected == null ? undefined : BigInt(rowsAffected),
+      };
+    } finally {
+      this._inflightQueryId = undefined;
+    }
   }
 
   async *streamQuery<R>(
@@ -98,9 +122,70 @@ export class PostgrejsConnection implements DatabaseConnection {
       }
     } finally {
       // Closes whether the consumer ran out of rows, broke out of the
-      // loop, or threw.
+      // loop, or threw. This is also how an aborted stream ends: Kysely
+      // calls the iterator's `return()` rather than either handler below.
       await cursor.close();
     }
+  }
+
+  /**
+   * Cancels the statement this connection is running, for Kysely's
+   * `'cancel query'` abort strategy.
+   *
+   * The CancelRequest travels on a connection of its own, which the
+   * protocol opens for exactly this - so unlike Kysely's `pg` dialect,
+   * nothing here waits for a second pooled connection to fall idle, and
+   * the `controlConnectionProvider` Kysely offers goes unused. The
+   * cancelled statement rejects with PostgreSQL's `57014`, and the
+   * connection stays usable.
+   *
+   * Cancelling is a request, not a guarantee: the statement may finish
+   * first, and writes are often past the point of being cancellable.
+   */
+  async cancelQuery(): Promise<void> {
+    if (!this._inflightQueryId) return;
+    await this._connection.cancel();
+  }
+
+  /**
+   * Terminates the backend this connection is running on, for Kysely's
+   * `'kill session'` abort strategy - the query, its transaction and any
+   * locks it holds go with it.
+   *
+   * `pg_terminate_backend` has to be called from another session, and
+   * that session is opened for the occasion rather than borrowed from the
+   * pool: killing is the strategy for when the query must stop at all
+   * costs, and queueing behind a busy pool - possibly behind the very
+   * connection being killed - would defeat it.
+   */
+  async killSession(): Promise<void> {
+    const queryId = this._inflightQueryId;
+    if (!queryId) return;
+    const processId = this._connection.processID;
+    /* c8 ignore next - a connection the pool handed out is connected */
+    if (processId == null) return;
+    const control = this._createControlConnection();
+    await control.connect();
+    try {
+      // Opening that connection took a moment, and the query may have
+      // finished in it. Killing the backend then would take down a
+      // connection that is no longer doing what we wanted stopped.
+      if (this._inflightQueryId !== queryId) return;
+      await control.query('select pg_terminate_backend($1)', {
+        params: [processId],
+      });
+    } finally {
+      await control.close();
+    }
+  }
+
+  /**
+   * The session `killSession` runs `pg_terminate_backend` from. It is
+   * built from the pooled connection's own configuration, so it reaches
+   * the same server as the same user with no further wiring.
+   */
+  protected _createControlConnection(): Connection {
+    return new Connection(this._connection.config);
   }
 
   protected _queryOptions(compiledQuery: CompiledQuery): QueryOptions {

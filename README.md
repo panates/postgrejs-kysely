@@ -57,6 +57,32 @@ statement leaves the transaction usable. That is not what PostgreSQL does, nor w
 therefore every existing Kysely user - expects. The dialect turns it off: a failed statement aborts
 the transaction. Set it back to `true` to opt into PostgreJS's behaviour.
 
+## Aborting a query
+
+Pass a signal, and pick what should happen to the statement already running on the server:
+
+```ts
+const controller = new AbortController();
+
+await db.selectFrom('person').selectAll().execute({
+  signal: controller.signal,
+  inflightQueryAbortStrategy: 'cancel query', // or 'kill session'
+});
+```
+
+Both strategies are supported, and neither queues behind the pool:
+
+- **`'cancel query'`** sends a CancelRequest, which the protocol carries on a connection of its own.
+  The statement rejects with PostgreSQL's `57014` and the connection stays usable. Kysely's `pg`
+  dialect has to run `pg_cancel_backend()` from a second connection instead - either a dedicated
+  client or, failing that, one it waits for the pool to free.
+- **`'kill session'`** runs `pg_terminate_backend()` from a session opened for the occasion. The
+  query, its transaction and its locks go with the backend; the pool notices the closed connection
+  and replaces it.
+
+The default, `'ignore query'`, stops waiting and leaves the statement running - no dialect support
+is involved.
+
 ## Differences from Kysely's `pg` dialect
 
 - **`int8` is a number, not a string.** PostgreJS decodes `bigint` columns as a `number` inside the
@@ -70,9 +96,9 @@ the transaction. Set it back to `true` to opt into PostgreJS's behaviour.
 
 ## Status
 
-Under construction. The dialect runs Kysely's query builder, transactions, savepoints, streaming and
-introspection against a live server today. Still to come: the abort/cancellation surface
-(`cancelQuery`, `killSession`), and a run against Kysely's own dialect test suite.
+Under construction. The dialect runs Kysely's query builder, transactions, savepoints, streaming,
+introspection and both in-flight abort strategies against a live server today. Still to come: a run
+against Kysely's own dialect test suite.
 
 ## License
 

@@ -12,6 +12,20 @@ export interface RecordedCall {
   args: any[];
 }
 
+export interface Deferred<T = void> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+/** A promise something else decides the timing of. */
+export function deferred<T = void>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 export class FakeCursor {
   closed = false;
   readonly fetched: number[] = [];
@@ -34,6 +48,11 @@ export class FakeCursor {
 export class FakeConnection {
   readonly calls: RecordedCall[] = [];
   processID?: number;
+  config = { host: 'fake-host', database: 'fake-db' };
+  /** When set, `query()` waits for this before answering. */
+  queryGate?: Promise<void>;
+  /** When set, `connect()` waits for this before resolving. */
+  connectGate?: Promise<void>;
   /** What `query()` answers - or throws, when it is an Error. */
   queryResult:
     | QueryResult
@@ -53,8 +72,22 @@ export class FakeConnection {
       .map(call => ({ sql: call.args[0], options: call.args[1] }));
   }
 
+  async connect(): Promise<void> {
+    this.calls.push({ method: 'connect', args: [] });
+    if (this.connectGate) await this.connectGate;
+  }
+
+  async close(): Promise<void> {
+    this.calls.push({ method: 'close', args: [] });
+  }
+
+  async cancel(): Promise<void> {
+    this.calls.push({ method: 'cancel', args: [] });
+  }
+
   async query(sql: string, options?: QueryOptions): Promise<QueryResult> {
     this.calls.push({ method: 'query', args: [sql, options] });
+    if (this.queryGate) await this.queryGate;
     const result =
       typeof this.queryResult === 'function'
         ? this.queryResult(sql, options)
