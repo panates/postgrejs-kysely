@@ -163,9 +163,12 @@ peer range: **727 passing, the same 1 failing**. For comparison, the same checko
 own `pg` dialect passes 684 - the same tests, none of them skipped.
 
 The one failure asserts that the pool's last error reads "Connection terminated unexpectedly", which
-is `pg`'s wording after a killed session. PostgreJS's pool emits nothing at all there: it destroys
-the connection and opens another. The kill itself works - the test's own check that the query is
-gone passes first.
+is `pg`'s wording after a killed session. PostgreJS 3.6 emits nothing at all there: it destroys the
+connection and opens another. The kill itself works - the test's own check that the query is gone
+passes first. PostgreJS has since grown a `ConnectionLostError` (SQLSTATE `08006`, carrying the
+backend's `processID`) that its pool reports on `'error'` and `'destroy'`, and with that build the
+suite passes all 684 - the same number as Kysely's own `pg` dialect. These numbers move to
+**684 / 0** and **728 / 0** when that release lands and the peer floor moves with it.
 
 Two other tests name the `pg` driver rather than describe behaviour: one asserts the error is an
 instance of `pg`'s `DatabaseError`, and one stubs `PostgresDriver.prototype` and expects the stub to

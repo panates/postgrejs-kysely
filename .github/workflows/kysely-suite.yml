@@ -22,7 +22,10 @@ jobs:
       fail-fast: false
       matrix:
         # Both ends of the peer range. The failure counts are the ones the
-        # README explains; a change in either is what this job is for.
+        # README explains; a change in either is what this job is for. The
+        # one failure left is the pool error a killed session does not
+        # report on PostgreJS 3.6 - it goes to 0 with the release that adds
+        # ConnectionLostError, along with the peer floor.
         include:
           - kysely: v0.29.6
             expected-failures: 1
