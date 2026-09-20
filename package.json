@@ -1,7 +1,7 @@
 {
   "name": "kysely-postgrejs",
   "description": "Kysely dialect for PostgreJS - run a Kysely query builder on PostgreJS's wire-protocol client",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Panates",
   "license": "BSD-3-Clause",
   "private": true,

@@ -1,6 +1,12 @@
 ## Changelog
 
-### 1.0.0
+### [v1.0.1](https://github.com/panates/postgrejs-kysely/compare/v1.0.0...v1.0.1) - 
+
+#### 📖 Documentation Changes
+
+- docs: the suite passes outright, and the peer floor follows PostgreJS @Eray Hanoğlu 
+
+### v1.0.0
 
 #### 🚀 New Features
 
