@@ -39,3 +39,36 @@ index 85328bf..e1ecfd8 100644
      }),
      plugins: PLUGINS,
    },
+diff --git a/test/node/src/transaction.test.ts b/test/node/src/transaction.test.ts
+index 1b19740..bc03242 100644
+--- a/test/node/src/transaction.test.ts
++++ b/test/node/src/transaction.test.ts
+@@ -22,6 +22,10 @@ import {
+   DIALECTS,
+ } from './test-setup.js'
+ import { DatabaseError as PostgresError } from 'pg'
++// PATCHED: the postgres variant runs on kysely-postgrejs, so the driver the
++// stub has to reach and the error class the driver throws are both its own.
++import { DatabaseError as PostgrejsError } from 'postgrejs'
++import { PostgrejsDriver } from 'kysely-postgrejs'
+ import { SqliteError } from 'better-sqlite3'
+ 
+ for (const dialect of DIALECTS) {
+@@ -260,7 +264,7 @@ for (const dialect of DIALECTS) {
+         if (sqlSpec === 'sqlite') {
+           expect(error).to.be.instanceOf(SqliteError)
+         } else if (sqlSpec === 'postgres' && variant !== 'pglite') {
+-          expect(error).to.be.instanceOf(PostgresError)
++          expect(error).to.be.instanceOf(PostgrejsError)
+         }
+ 
+         expect((error as Error).stack).to.include('transaction.test.js')
+@@ -269,7 +273,7 @@ for (const dialect of DIALECTS) {
+ 
+     it('should not attempt to rollback if transaction failed to begin', async () => {
+       const driverProto = {
+-        postgres: PostgresDriver,
++        postgres: PostgrejsDriver,
+         mysql: MysqlDriver,
+         mssql: MssqlDriver,
+         sqlite: SqliteDriver,

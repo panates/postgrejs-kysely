@@ -151,9 +151,10 @@ in the PostgreJS repo - that is what `npm test`'s live tests use.
 
 `scripts/run-kysely-suite.sh` runs Kysely's own dialect suite against this dialect: it checks Kysely out,
 points its `postgres` variant at us (`scripts/kysely-suite.patch`), and uses Kysely's own compose
-database on port 5434, so the local server is untouched. `EXPECTED_FAILURES=3` makes it succeed only
-while the known failures are exactly the known failures - the README lists them, and all three are the
-suite recognising the `pg` driver rather than a difference in behaviour. Two gotchas: `pnpm`
+database on port 5434, so the local server is untouched. `EXPECTED_FAILURES=1` makes it succeed only
+while the known failures are exactly the known failures - the one left asserts `pg`'s own wording for
+a pool error, and the README says why. Kysely's `pg` dialect passes 684 on that same checkout, which
+is the number to compare against. Two gotchas: `pnpm`
 through corepack dies on Node 24 (`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`), so the script goes through
 `npx --yes pnpm@10.18.3`; and a container left over from a run that could not bind 5434 keeps running
 with no published port at all, which the script now recreates rather than wait five minutes for the

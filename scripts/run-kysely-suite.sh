@@ -39,7 +39,7 @@ if [ ! -d "$KYSELY_DIR/.git" ]; then
 fi
 git -C "$KYSELY_DIR" fetch --tags --quiet
 # Drop a patch left by an earlier run before moving the checkout.
-git -C "$KYSELY_DIR" checkout --quiet -- test/node/src/test-setup.ts
+git -C "$KYSELY_DIR" checkout --quiet -- test/node/src
 git -C "$KYSELY_DIR" checkout --quiet "$KYSELY_VERSION"
 
 say "Starting Kysely's own PostgreSQL (port 5434)"

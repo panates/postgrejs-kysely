@@ -158,18 +158,22 @@ one, and runs all of it:
 scripts/run-kysely-suite.sh
 ```
 
-Against Kysely v0.29.6: **681 passing, 3 failing**. Against v0.30.0-beta.2, the other end of the
-peer range: **725 passing, the same 3 failing**. All three are the suite recognising the `pg` driver
-rather than a difference in behaviour:
+Against Kysely v0.29.6: **683 passing, 1 failing**. Against v0.30.0-beta.2, the other end of the
+peer range: **727 passing, the same 1 failing**. For comparison, the same checkout against Kysely's
+own `pg` dialect passes 684 - the same tests, none of them skipped.
 
-| What the test asserts                                              | Why it cannot hold here                    |
-| ------------------------------------------------------------------ | ------------------------------------------ |
-| The error is an instance of `pg`'s `DatabaseError`                   | ours is PostgreJS's, with the same `code`  |
-| A stub on `PostgresDriver.prototype.beginTransaction` was called     | that driver is not the one running         |
-| The pool's last error reads "Connection terminated unexpectedly"     | that is `pg`'s wording for a killed session |
+The one failure asserts that the pool's last error reads "Connection terminated unexpectedly", which
+is `pg`'s wording after a killed session. PostgreJS's pool emits nothing at all there: it destroys
+the connection and opens another. The kill itself works - the test's own check that the query is
+gone passes first.
 
-The suite runs with `fetchAsString: [DataTypeOIDs.int8]`, since every expectation in it is written
-against `pg`'s string bigints.
+Two other tests name the `pg` driver rather than describe behaviour: one asserts the error is an
+instance of `pg`'s `DatabaseError`, and one stubs `PostgresDriver.prototype` and expects the stub to
+be called. The patch points both at this dialect's equivalents, which is what makes them test
+anything at all here - left alone they would pass over the behaviour without exercising it.
+
+The suite also runs with `fetchAsString: [DataTypeOIDs.int8]`, since every expectation in it is
+written against `pg`'s string bigints.
 
 A weekly CI job re-runs both, and fails if that count moves in either direction - the failures are
 known, so what matters is whether the set of them changed.
