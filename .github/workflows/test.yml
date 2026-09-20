@@ -35,7 +35,7 @@ jobs:
         # tested: the current stable line and the next one while it is still
         # in beta.
         kysely: [ '0.29.6', '0.30.0-beta.2' ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
