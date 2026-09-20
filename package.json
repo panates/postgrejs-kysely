@@ -7,7 +7,7 @@
   "private": true,
   "peerDependencies": {
     "kysely": ">=0.29.0 <0.31.0",
-    "postgrejs": ">=3.6.1 <4"
+    "postgrejs": ">=3.7.0 <4"
   },
   "devDependencies": {
     "@panates/eslint-config": "^2.1.6",
@@ -26,7 +26,7 @@
     "husky": "^9.1.7",
     "kysely": "^0.29.6",
     "mocha": "^12.0.1",
-    "postgrejs": "^3.6.1",
+    "postgrejs": "^3.7.0",
     "prettier": "^3.9.4",
     "rimraf": "^6.1.3",
     "ts-cleanup": "^1.3.0",
