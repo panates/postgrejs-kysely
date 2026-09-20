@@ -12,7 +12,7 @@ and query compiler are Kysely's own `Postgres*` implementations.
 npm install kysely-postgrejs kysely postgrejs
 ```
 
-`kysely` (>=0.29 <0.31) and `postgrejs` (>=3.6) are peer dependencies.
+`kysely` (>=0.29 <0.31) and `postgrejs` (>=3.7) are peer dependencies.
 
 ## Usage
 
@@ -158,19 +158,11 @@ one, and runs all of it:
 scripts/run-kysely-suite.sh
 ```
 
-Against Kysely v0.29.6: **683 passing, 1 failing**. Against v0.30.0-beta.2, the other end of the
-peer range: **727 passing, the same 1 failing**. For comparison, the same checkout against Kysely's
-own `pg` dialect passes 684 - the same tests, none of them skipped.
+Against Kysely v0.29.6: **684 passing, nothing failing** - the same number Kysely's own `pg` dialect
+scores on that checkout, with no test skipped. Against v0.30.0-beta.2, the other end of the peer
+range: **728 passing, nothing failing**.
 
-The one failure asserts that the pool's last error reads "Connection terminated unexpectedly", which
-is `pg`'s wording after a killed session. PostgreJS 3.6 emits nothing at all there: it destroys the
-connection and opens another. The kill itself works - the test's own check that the query is gone
-passes first. PostgreJS has since grown a `ConnectionLostError` (SQLSTATE `08006`, carrying the
-backend's `processID`) that its pool reports on `'error'` and `'destroy'`, and with that build the
-suite passes all 684 - the same number as Kysely's own `pg` dialect. These numbers move to
-**684 / 0** and **728 / 0** when that release lands and the peer floor moves with it.
-
-Two other tests name the `pg` driver rather than describe behaviour: one asserts the error is an
+Two of those tests name the `pg` driver rather than describe behaviour: one asserts the error is an
 instance of `pg`'s `DatabaseError`, and one stubs `PostgresDriver.prototype` and expects the stub to
 be called. The patch points both at this dialect's equivalents, which is what makes them test
 anything at all here - left alone they would pass over the behaviour without exercising it.
