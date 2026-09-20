@@ -15,6 +15,7 @@ import type { PostgrejsDialectConfig } from './postgrejs-dialect-config.js';
  */
 export type PostgrejsConnectionOptions = Pick<
   PostgrejsDialectConfig,
+  | 'fetchAsString'
   | 'fetchCount'
   | 'inferParameterTypes'
   | 'prepare'
@@ -255,6 +256,7 @@ export class PostgrejsConnection implements DatabaseConnection {
       rollbackOnError: config.rollbackOnError ?? false,
       prepare: config.prepare,
       typeMap: config.typeMap,
+      fetchAsString: config.fetchAsString,
     };
   }
 }

@@ -12,7 +12,8 @@ and query compiler are Kysely's own `Postgres*` implementations.
 npm install kysely-postgrejs kysely postgrejs
 ```
 
-`kysely` (>=0.29 <0.31) and `postgrejs` (>=3.5) are peer dependencies.
+`kysely` (>=0.29 <0.31) and `postgrejs` (>=3.5) are peer dependencies. `fetchAsString` and the row
+count for `merge` need PostgreJS 3.6 or later.
 
 ## Usage
 
@@ -60,6 +61,7 @@ The pool you passed in is of course still yours to `acquire()` from directly as 
 | Option                | Default           | What it does                                                                              |
 | --------------------- | ----------------- | ----------------------------------------------------------------------------------------- |
 | `pool`                | (required)        | A PostgreJS `Pool`, or a function returning one.                                            |
+| `fetchAsString`       | -                 | OIDs to hand back as the server's own text. `[DataTypeOIDs.int8]` is how to get `pg`'s bigints. |
 | `fetchCount`          | `4294967295`      | How many rows a statement may return before the portal suspends. See below.                 |
 | `inferParameterTypes` | `true`            | Whether PostgreSQL resolves each parameter's type from context, as it does for `pg`.        |
 | `prepare`             | connection's own  | Whether statements are cached as server-side prepared statements. `false` for PgBouncer.    |
@@ -90,6 +92,21 @@ type 0 - unspecified - and lets PostgreSQL resolve each parameter from where it 
 this surfaces there. The dialect does the same by default. Only strings, numbers, booleans, bigints
 and nulls are affected; dates, buffers, arrays and objects keep PostgreJS's typed, binary encoding,
 which is both correct and faster. Set `inferParameterTypes: false` to declare types again.
+
+### Getting `pg`'s bigints
+
+PostgreJS decodes `int8` as a number inside the safe integer range and a `BigInt` beyond it, where
+`pg` hands back a string - which is what Kysely's generated types and most code ported from `pg`
+expect, `count(*)` and `sum(...)` above all. One line asks for the same thing:
+
+```ts
+import { DataTypeOIDs } from 'postgrejs';
+
+new PostgrejsDialect({ pool, fetchAsString: [DataTypeOIDs.int8] });
+```
+
+The server renders those columns as text and the dialect hands them over untouched, so a value past
+2^53 keeps every digit. Any OID works - `numeric`, `date`, `json` - and nothing else is affected.
 
 ### Why `rollbackOnError` defaults to `false`
 
@@ -126,16 +143,10 @@ is involved.
 
 ## Differences from Kysely's `pg` dialect
 
-- **`int8` is a number, not a string.** PostgreJS decodes `bigint` columns as a `number` inside the
-  safe integer range and a `BigInt` beyond it, where `pg` hands back a string. This shows up most
-  often in `count(*)`, `sum(...)` and other aggregates: `Number(result.count)` works either way,
-  `result.count === '2'` does not.
-- **A `merge` reports no `numAffectedRows`.** PostgreJS fills the row count for INSERT/UPDATE/DELETE
-  only, and nothing is invented to cover that up.
-- **`typeMap` is hard to use on PostgreJS 3.5.** `new DataTypeMap(GlobalTypeMap)` does not copy the
-  map's OID index, so every column of a query using the copy comes back as a raw `Buffer`. Until
-  that is fixed upstream, the way to override a type is `GlobalTypeMap.register(...)`, which
-  applies process-wide.
+- **`int8` is a number, not a string, unless you ask.** The default is PostgreJS's own decoding;
+  `fetchAsString: [DataTypeOIDs.int8]` gives you `pg`'s strings. See above.
+- **Errors are PostgreJS's `DatabaseError`,** not `pg`'s. The PostgreSQL `code` (`23505`, `42P01`)
+  is the same and is what to match on; `instanceof` against `pg`'s class is not.
 
 ## Kysely's own test suite
 
@@ -147,15 +158,18 @@ one, and runs all of it:
 scripts/run-kysely-suite.sh
 ```
 
-Against Kysely v0.29.6: **654 passing, 30 failing**. Against v0.30.0-beta.2, the other end of the
-peer range: **698 passing, the same 30 failing**. Every failure is accounted for:
+Against Kysely v0.29.6: **681 passing, 3 failing**. Against v0.30.0-beta.2, the other end of the
+peer range: **725 passing, the same 3 failing**. All three are the suite recognising the `pg` driver
+rather than a difference in behaviour:
 
-| Failures | What                                                                    | Whose                                                     |
-| -------- | ----------------------------------------------------------------------- | --------------------------------------------------------- |
-| 22       | `merge` queries report no `numAffectedRows`                              | PostgreJS: it fills `rowsAffected` for INSERT/UPDATE/DELETE only |
-| 5        | `count`/`sum` return a number where the test expects `pg`'s string        | the `int8` decision above                                   |
-| 2        | the error is not an instance of `pg`'s `DatabaseError`, and a test stubs `PostgresDriver.prototype` | the suite identifying the `pg` driver       |
-| 1        | a pool error is not `pg`'s "Connection terminated unexpectedly"           | the same                                                    |
+| What the test asserts                                              | Why it cannot hold here                    |
+| ------------------------------------------------------------------ | ------------------------------------------ |
+| The error is an instance of `pg`'s `DatabaseError`                   | ours is PostgreJS's, with the same `code`  |
+| A stub on `PostgresDriver.prototype.beginTransaction` was called     | that driver is not the one running         |
+| The pool's last error reads "Connection terminated unexpectedly"     | that is `pg`'s wording for a killed session |
+
+The suite runs with `fetchAsString: [DataTypeOIDs.int8]`, since every expectation in it is written
+against `pg`'s string bigints.
 
 A weekly CI job re-runs both, and fails if that count moves in either direction - the failures are
 known, so what matters is whether the set of them changed.
@@ -203,8 +217,7 @@ scripts/run-kysely-suite.sh   # Kysely's own suite, on its own database
 
 Pre-1.0, and complete enough to use: the query builder, transactions, savepoints, streaming,
 introspection and both in-flight abort strategies all work against a live server, and Kysely's own
-dialect suite passes except for the rows above. The one real gap is `numAffectedRows` for `merge`,
-which needs a fix in PostgreJS.
+dialect suite passes every test that is not asserting the identity of the `pg` driver.
 
 ## License
 

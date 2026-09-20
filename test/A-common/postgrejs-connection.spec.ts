@@ -1,7 +1,7 @@
 import { expect } from 'expect';
 import { CompiledQuery } from 'kysely';
 import type { Connection } from 'postgrejs';
-import { BindParam } from 'postgrejs';
+import { BindParam, DataTypeOIDs } from 'postgrejs';
 import { MAX_FETCH_COUNT } from '../../src/constants.js';
 import type { PostgrejsConnectionOptions } from '../../src/postgrejs-connection.js';
 import { PostgrejsConnection } from '../../src/postgrejs-connection.js';
@@ -62,6 +62,22 @@ describe('PostgrejsConnection', () => {
       const connection = new PostgrejsConnection(fake.asConnection(), {});
       await connection.executeQuery(CompiledQuery.raw('select 1'));
       expect(fake.queries[0].options?.rollbackOnError).toStrictEqual(false);
+    });
+
+    it('should pass fetchAsString through, and leave it unset by default', async () => {
+      const plain = new FakeConnection();
+      await new PostgrejsConnection(plain.asConnection(), {}).executeQuery(
+        CompiledQuery.raw('select 1'),
+      );
+      expect(plain.queries[0].options?.fetchAsString).toBeUndefined();
+
+      const fake = new FakeConnection();
+      await new PostgrejsConnection(fake.asConnection(), {
+        fetchAsString: [DataTypeOIDs.int8],
+      }).executeQuery(CompiledQuery.raw('select 1'));
+      expect(fake.queries[0].options?.fetchAsString).toStrictEqual([
+        DataTypeOIDs.int8,
+      ]);
     });
 
     it('should let the config override fetchCount, prepare and rollbackOnError', async () => {

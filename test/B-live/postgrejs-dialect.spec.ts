@@ -1,6 +1,6 @@
 import { expect } from 'expect';
 import { type Generated, Kysely, sql } from 'kysely';
-import { Pool } from 'postgrejs';
+import { DataTypeOIDs, Pool } from 'postgrejs';
 import { PostgrejsDialect } from '../../src/postgrejs-dialect.js';
 
 interface TestDatabase {
@@ -419,6 +419,33 @@ describe('PostgrejsDialect (live)', () => {
         .execute()
         .catch(e => e);
       expect(error.stack).toContain('postgrejs-dialect.spec.ts');
+    });
+  });
+  describe('fetchAsString', () => {
+    it('should decode int8 as a number by default', async () => {
+      const result = await sql<{ c: unknown }>`
+        select count(*) as c from kysely_postgrejs_test`.execute(db);
+      expect(typeof result.rows[0].c).toStrictEqual('number');
+    });
+
+    it("should hand back the server's own text for the listed types", async () => {
+      // What `pg` does with int8, and what code ported from it expects.
+      const strings = new Kysely<TestDatabase>({
+        dialect: new PostgrejsDialect({
+          pool: new Pool({ max: 1 }),
+          fetchAsString: [DataTypeOIDs.int8],
+        }),
+      });
+      try {
+        const result = await sql<{ c: unknown; big: unknown }>`
+          select count(*) as c, 9007199254740993::int8 as big
+          from kysely_postgrejs_test`.execute(strings);
+        expect(result.rows[0].c).toStrictEqual('0');
+        // Past 2^53 a number could not have carried this back intact.
+        expect(result.rows[0].big).toStrictEqual('9007199254740993');
+      } finally {
+        await strings.destroy();
+      }
     });
   });
 });

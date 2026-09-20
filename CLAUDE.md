@@ -38,21 +38,21 @@ Kysely's `QueryResult`: `rows: O[]` (always defined, empty when there are none),
 Source of truth is the repo at `../../oslib/postgrejs` (its own `CLAUDE.md` describes the internals).
 The facts below were checked against a live server, not recalled.
 
-**`connection.query(sql, options)` caps at 100 rows.** This is the one that will bite. `fetchCount`
-defaults to 100 and a plain `query()` of 1000 rows comes back with **100 rows and no error, no flag** -
-the portal suspends and the result is what arrived. `executeQuery()` must therefore pass a `fetchCount`
-large enough for the whole result, or page a cursor itself. Verified: `select i from generate_series(1,
-1000) i` returns 100 rows by default, 1000 with `{ fetchCount: 1000 }`.
+**`connection.query(sql, options)` used to cap at 100 rows** - a plain `query()` of 1000 rows came
+back with 100 of them, no error and no flag, because the portal suspended and nothing said so. 3.6
+turned that around: the default is every row, `fetchCount: 0` means unlimited, and a result that was
+truncated carries `suspended: true`. The dialect still passes `MAX_FETCH_COUNT` explicitly, which
+costs nothing and keeps it correct on 3.5 as well.
 
 **Rows are arrays by default.** Kysely wants objects, so pass `objectRows: true` (or `rowDecoder:
 'object'`). `QueryResult` from PostgreJS carries `command`, `fields`, `rowType`, `rows`, and
-`rowsAffected` for INSERT/UPDATE/DELETE - a **number**, so convert to bigint for Kysely's
-`numAffectedRows`. Not MERGE, though the command tag carries the count: that gap is 22 of the failures
-Kysely's suite still has against this dialect, and the fix belongs upstream.
+`rowsAffected` for INSERT/UPDATE/DELETE and, since 3.6, MERGE - a **number**, so convert to bigint
+for Kysely's `numAffectedRows`.
 
 **Parameters are `$1`-style**, passed as `options.params`, so Kysely's `CompiledQuery` needs no
 rewriting - but their **types** do. `Connection._query` derives an OID per parameter with
-`typeMap.determine(value)`, so a string arrives declared as `varchar` and PostgreSQL stops inferring:
+`typeMap.determine(value)`, so a string arrives declared as `varchar` - or, before 3.6, as `"char"`
+when it happened to be one character long - and PostgreSQL stops inferring:
 inserting into a `json` column, `coalesce($1, 1)`, `$1 || x` and any overloaded function all fail. `pg`
 sends OID 0 (unspecified) and lets the server resolve the parameter from context. Wrapping a value in
 `new BindParam(0, value)` asks PostgreJS for the same thing - `paramTypes[i] || 0` in Parse, the text
@@ -66,7 +66,7 @@ it with `for await` closes it when the loop ends - by exhaustion, a `break`, or 
 sets the batch size, which is what `streamQuery`'s `chunkSize` should map to.
 
 **Transactions.** `startTransaction()` / `commit()` / `rollback()` are depth-counted, and
-`savepoint(name)` insists on `/^[a-zA-Z]\w+$/`. The dialect uses none of them (see above), and nothing
+`savepoint(name)` validates the name. The dialect uses none of them (see above), and nothing
 breaks: `inTransaction` reads the server's own transaction status rather than the depth counter, and
 `TRANSACTION_COMMAND_PATTERN` recognises BEGIN/COMMIT/SAVEPOINT in a statement, so PostgreJS's
 bookkeeping stays in step with SQL sent past it.
@@ -90,9 +90,10 @@ Kysely passes errors through, so there is nothing to map, but the code is what u
 **Types.** The extended query path is binary per column by default and covers all built-in types;
 `columnFormat` forces text if ever needed. `int8` comes back as a number inside the safe range and a
 BigInt beyond it, where `pg` hands back a string - which is what the suite's `count`/`sum` expectations
-are built on. `typeMap` takes a custom `DataTypeMap`, but on 3.5 `new DataTypeMap(GlobalTypeMap)` does
-not copy the map's OID index, so a query using the copy decodes every column as a raw `Buffer` - the
-option is a trap until that is fixed upstream.
+are built on, and what `fetchAsString: [DataTypeOIDs.int8]` asks for. Since 3.6 `fetchAsString` covers
+every OID by asking the server for text, rather than the six types that used to honour it. `typeMap`
+takes a custom `DataTypeMap`; copying `GlobalTypeMap` works from 3.6 on (before that the copy lost its
+OID index and decoded everything as raw `Buffer`s).
 
 **Cancellation.** Every call takes an `AbortSignal` as `options.signal`, and `connection.cancel()` cancels
 out of band. Those are what Kysely's `AbortableOperationOptions` and optional `cancelQuery` map to.
@@ -105,7 +106,8 @@ Chosen deliberately, and not worth re-opening without new evidence:
 - `fetchCount` defaults to the protocol maximum, never PostgreJS's silently-truncating 100.
 - Parameter types are left to the server; `inferParameterTypes: false` opts out.
 - Transaction and savepoint commands go through `executeQuery`, so Kysely can see them.
-- `int8` stays PostgreJS-native (number, then BigInt). No string coercion, no option for it.
+- `int8` stays PostgreJS-native (number, then BigInt) by default; `fetchAsString: [DataTypeOIDs.int8]`
+  is the opt-in for `pg`'s strings, passed straight through to PostgreJS.
 - The config takes a `Pool` or an async factory - no connection string, no bare `Connection`.
 - `cancelQuery` uses PostgreJS's out-of-band `cancel()`; `killSession` opens its own session from
   `connection.config` rather than borrowing one from the pool.
@@ -148,8 +150,9 @@ in the PostgreJS repo - that is what `npm test`'s live tests use.
 
 `scripts/run-kysely-suite.sh` runs Kysely's own dialect suite against this dialect: it checks Kysely out,
 points its `postgres` variant at us (`scripts/kysely-suite.patch`), and uses Kysely's own compose
-database on port 5434, so the local server is untouched. `EXPECTED_FAILURES=30` makes it succeed only
-while the known failures are exactly the known failures - the README lists them. Two gotchas: `pnpm`
+database on port 5434, so the local server is untouched. `EXPECTED_FAILURES=3` makes it succeed only
+while the known failures are exactly the known failures - the README lists them, and all three are the
+suite recognising the `pg` driver rather than a difference in behaviour. Two gotchas: `pnpm`
 through corepack dies on Node 24 (`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`), so the script goes through
 `npx --yes pnpm@10.18.3`; and a container left over from a run that could not bind 5434 keeps running
 with no published port at all, which the script now recreates rather than wait five minutes for the

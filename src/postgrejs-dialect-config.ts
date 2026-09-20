@@ -1,10 +1,23 @@
 import type { AbortableOperationOptions, DatabaseConnection } from 'kysely';
-import type { DataTypeMap, Pool } from 'postgrejs';
+import type { DataTypeMap, OID, Pool } from 'postgrejs';
 
 /**
  * Config for the PostgreJS dialect.
  */
 export interface PostgrejsDialectConfig {
+  /**
+   * PostgreSQL types that should come back as the text the server renders,
+   * by OID, instead of being decoded into a JavaScript value.
+   *
+   * This is how to get `pg`'s bigints: `fetchAsString: [DataTypeOIDs.int8]`
+   * makes `count(*)`, `sum(...)` and every other `int8` a string, which is
+   * what Kysely's generated types and most code ported from `pg` expect.
+   * PostgreJS otherwise decodes `int8` as a number inside the safe integer
+   * range and a BigInt beyond it. Needs PostgreJS 3.6 or later, where the
+   * option covers every type rather than six of them.
+   */
+  fetchAsString?: OID[];
+
   /**
    * How many rows each statement may return before PostgreSQL suspends the
    * portal. Defaults to {@link MAX_FETCH_COUNT}, i.e. "however many there

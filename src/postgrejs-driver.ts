@@ -82,8 +82,8 @@ export class PostgrejsDriver implements Driver {
    * from the server's own transaction status rather than from the depth
    * counter its primitives keep, and recognises BEGIN/COMMIT/SAVEPOINT in
    * a statement, so its bookkeeping stays in step either way. Savepoint
-   * names also stop being restricted to PostgreJS's `/^[a-zA-Z]\w+$/`:
-   * Kysely compiles the name as a quoted identifier, as `pg` does.
+   * names also stop going through PostgreJS's own validation: Kysely
+   * compiles the name as a quoted identifier, as `pg` does.
    */
   async beginTransaction(
     connection: DatabaseConnection,
