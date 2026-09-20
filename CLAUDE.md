@@ -36,23 +36,24 @@ Kysely's `QueryResult`: `rows: O[]` (always defined, empty when there are none),
 ## What PostgreJS gives you
 
 Source of truth is the repo at `../../oslib/postgrejs` (its own `CLAUDE.md` describes the internals).
-The facts below were checked against a live server, not recalled.
+The facts below were checked against a live server on PostgreJS 3.6, not recalled - the peer range
+starts there, so nothing has to account for 3.5 any more.
 
-**`connection.query(sql, options)` used to cap at 100 rows** - a plain `query()` of 1000 rows came
-back with 100 of them, no error and no flag, because the portal suspended and nothing said so. 3.6
-turned that around: the default is every row, `fetchCount: 0` means unlimited, and a result that was
-truncated carries `suspended: true`. The dialect still passes `MAX_FETCH_COUNT` explicitly, which
-costs nothing and keeps it correct on 3.5 as well.
+**`connection.query(sql, options)` returns every row** since 3.6 - `fetchCount` defaults to 0, which
+is the protocol's "no limit", and a result that was truncated carries `suspended: true`. (Before 3.6
+the default was 100 and a truncated result said nothing at all, which is the hazard the explicit
+`MAX_FETCH_COUNT` was written against.) The dialect keeps passing it: Kysely's `QueryResult` has
+nowhere to carry `suspended`, so a short result would reach the caller looking complete.
 
 **Rows are arrays by default.** Kysely wants objects, so pass `objectRows: true` (or `rowDecoder:
 'object'`). `QueryResult` from PostgreJS carries `command`, `fields`, `rowType`, `rows`, and
-`rowsAffected` for INSERT/UPDATE/DELETE and, since 3.6, MERGE - a **number**, so convert to bigint
-for Kysely's `numAffectedRows`.
+`rowsAffected` for INSERT/UPDATE/DELETE and MERGE - a **number**, so convert to bigint for Kysely's
+`numAffectedRows`.
 
 **Parameters are `$1`-style**, passed as `options.params`, so Kysely's `CompiledQuery` needs no
 rewriting - but their **types** do. `Connection._query` derives an OID per parameter with
-`typeMap.determine(value)`, so a string arrives declared as `varchar` - or, before 3.6, as `"char"`
-when it happened to be one character long - and PostgreSQL stops inferring:
+`typeMap.determine(value)`, so a string arrives declared as `varchar` and PostgreSQL stops
+inferring:
 inserting into a `json` column, `coalesce($1, 1)`, `$1 || x` and any overloaded function all fail. `pg`
 sends OID 0 (unspecified) and lets the server resolve the parameter from context. Wrapping a value in
 `new BindParam(0, value)` asks PostgreJS for the same thing - `paramTypes[i] || 0` in Parse, the text
@@ -90,10 +91,9 @@ Kysely passes errors through, so there is nothing to map, but the code is what u
 **Types.** The extended query path is binary per column by default and covers all built-in types;
 `columnFormat` forces text if ever needed. `int8` comes back as a number inside the safe range and a
 BigInt beyond it, where `pg` hands back a string - which is what the suite's `count`/`sum` expectations
-are built on, and what `fetchAsString: [DataTypeOIDs.int8]` asks for. Since 3.6 `fetchAsString` covers
-every OID by asking the server for text, rather than the six types that used to honour it. `typeMap`
-takes a custom `DataTypeMap`; copying `GlobalTypeMap` works from 3.6 on (before that the copy lost its
-OID index and decoded everything as raw `Buffer`s).
+are built on, and what `fetchAsString: [DataTypeOIDs.int8]` asks for - it takes any OID and has the
+server render those columns as text. `typeMap` takes a custom `DataTypeMap`, and copying
+`GlobalTypeMap` to override a type or two works.
 
 **Cancellation.** Every call takes an `AbortSignal` as `options.signal`, and `connection.cancel()` cancels
 out of band. Those are what Kysely's `AbortableOperationOptions` and optional `cancelQuery` map to.
@@ -103,7 +103,8 @@ out of band. Those are what Kysely's `AbortableOperationOptions` and optional `c
 Chosen deliberately, and not worth re-opening without new evidence:
 
 - `rollbackOnError: false` on every query - PostgreSQL's semantics, not PostgreJS's.
-- `fetchCount` defaults to the protocol maximum, never PostgreJS's silently-truncating 100.
+- `fetchCount` defaults to the protocol maximum: Kysely cannot carry PostgreJS's `suspended`, so a
+  short result would look complete.
 - Parameter types are left to the server; `inferParameterTypes: false` opts out.
 - Transaction and savepoint commands go through `executeQuery`, so Kysely can see them.
 - `int8` stays PostgreJS-native (number, then BigInt) by default; `fetchAsString: [DataTypeOIDs.int8]`

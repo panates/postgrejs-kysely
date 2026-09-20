@@ -13,16 +13,19 @@ export interface PostgrejsDialectConfig {
    * makes `count(*)`, `sum(...)` and every other `int8` a string, which is
    * what Kysely's generated types and most code ported from `pg` expect.
    * PostgreJS otherwise decodes `int8` as a number inside the safe integer
-   * range and a BigInt beyond it. Needs PostgreJS 3.6 or later, where the
-   * option covers every type rather than six of them.
+   * range and a BigInt beyond it. The server renders the listed columns as
+   * text and they are handed over untouched, so a value past 2^53 keeps
+   * every digit.
    */
   fetchAsString?: OID[];
 
   /**
    * How many rows each statement may return before PostgreSQL suspends the
    * portal. Defaults to {@link MAX_FETCH_COUNT}, i.e. "however many there
-   * are" - see that constant for why this is not left to PostgreJS's own
-   * default. `streamQuery` ignores this and uses Kysely's `chunkSize`.
+   * are" - see that constant for why the dialect says so rather than
+   * leaving it unsaid. Lower it and a result can come back short with no
+   * way for Kysely to know: `QueryResult` has nowhere to carry PostgreJS's
+   * `suspended`. `streamQuery` ignores this and uses Kysely's `chunkSize`.
    */
   fetchCount?: number;
 

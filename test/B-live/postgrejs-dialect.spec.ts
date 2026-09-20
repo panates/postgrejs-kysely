@@ -52,9 +52,10 @@ describe('PostgrejsDialect (live)', () => {
     expect(rows).toStrictEqual([{ id: 1, name: 'a', amount: 1 }]);
   });
 
-  it("should return every row of a result larger than PostgreJS's default batch", async () => {
-    // The regression this dialect exists to avoid: a plain PostgreJS
-    // query() stops at 100 rows and reports neither an error nor a flag.
+  it('should return every row of a large result', async () => {
+    // Guards the explicit fetchCount: a result that stopped short would
+    // reach the caller as a complete one, since Kysely's QueryResult has
+    // nowhere to carry PostgreJS's `suspended`.
     const result = await sql<{ i: number }>`
       select i from generate_series(1, 1000) i`.execute(db);
     expect(result.rows.length).toStrictEqual(1000);

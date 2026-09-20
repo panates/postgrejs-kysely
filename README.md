@@ -12,8 +12,7 @@ and query compiler are Kysely's own `Postgres*` implementations.
 npm install kysely-postgrejs kysely postgrejs
 ```
 
-`kysely` (>=0.29 <0.31) and `postgrejs` (>=3.5) are peer dependencies. `fetchAsString` and the row
-count for `merge` need PostgreJS 3.6 or later.
+`kysely` (>=0.29 <0.31) and `postgrejs` (>=3.6) are peer dependencies.
 
 ## Usage
 
@@ -72,10 +71,11 @@ The pool you passed in is of course still yours to `acquire()` from directly as 
 
 ### Why `fetchCount` defaults to "everything"
 
-PostgreJS's `query()` asks for 100 rows by default, and a portal that suspends is not an error: a
-`select` of 1000 rows comes back with 100 of them, no error and no flag. The dialect therefore asks
-for the protocol maximum instead. Lower it only if you know what a truncated result would mean for
-your queries; `streamQuery` ignores it and uses Kysely's `chunkSize` as the cursor's batch size.
+The dialect asks for the protocol maximum rather than leaving the limit unsaid. Kysely's
+`QueryResult` has nowhere to report that rows were left behind, so a truncated result would reach
+the caller as a short answer with nothing wrong about it - PostgreJS flags one with `suspended`, and
+that flag has no way through. Lower it only if you know what a short result would mean for your
+queries; `streamQuery` ignores it and uses Kysely's `chunkSize` as the cursor's batch size.
 
 ### Why parameter types are left to the server
 

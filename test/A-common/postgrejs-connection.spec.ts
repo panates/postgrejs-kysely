@@ -31,10 +31,9 @@ class TestConnection extends PostgrejsConnection {
 
 describe('PostgrejsConnection', () => {
   describe('executeQuery()', () => {
-    it("should ask for every row, not PostgreJS's truncating default", async () => {
-      // The whole reason this dialect can't just call query() with no
-      // options: fetchCount defaults to 100 and the rows beyond it are
-      // dropped with no error and no flag.
+    it('should ask for every row rather than leave the limit unsaid', async () => {
+      // Kysely's QueryResult has nowhere to carry PostgreJS's `suspended`,
+      // so a result that stopped short would look like a complete one.
       const fake = new FakeConnection();
       const connection = new PostgrejsConnection(fake.asConnection(), {});
       await connection.executeQuery(CompiledQuery.raw('select 1'));
