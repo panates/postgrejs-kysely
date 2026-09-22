@@ -1,6 +1,12 @@
 ## Changelog
 
-### [v1.0.1](https://github.com/panates/postgrejs-kysely/compare/v1.0.0...v1.0.1) - 
+### [v1.1.0](https://github.com/panates/postgrejs-kysely/compare/v1.0.1...v1.1.0) - 
+
+#### 📖 Documentation Changes
+
+- docs: keep the unspecified parameter types, and say what they cost @Eray Hanoğlu 
+
+### [v1.0.1](https://github.com/panates/postgrejs-kysely/compare/v1.0.0...v1.0.1) -  20 September 2026 
 
 #### 📖 Documentation Changes
 
