@@ -1,6 +1,12 @@
 ## Changelog
 
-### [v1.1.0](https://github.com/panates/postgrejs-kysely/compare/v1.0.1...v1.1.0) - 
+### [v1.1.1](https://github.com/panates/postgrejs-kysely/compare/v1.1.0...v1.1.1) - 
+
+#### 📖 Documentation Changes
+
+- docs: say what each default gives you, not what it guards against @Eray Hanoğlu 
+
+### [v1.1.0](https://github.com/panates/postgrejs-kysely/compare/v1.0.1...v1.1.0) -  22 September 2026 
 
 #### 📖 Documentation Changes
 
