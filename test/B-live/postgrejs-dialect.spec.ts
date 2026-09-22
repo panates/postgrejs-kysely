@@ -390,25 +390,31 @@ describe('PostgrejsDialect (live)', () => {
       expect(result.rows[0].value).toStrictEqual('ab');
     });
 
-    it('should still declare types when inferParameterTypes is off', async () => {
-      const strict = new Kysely<TestDatabase>({
-        dialect: new PostgrejsDialect({
-          pool: new Pool({ max: 1 }),
-          inferParameterTypes: false,
-        }),
-      });
-      try {
-        await sql`create temp table json_param_test2 (doc json)`.execute(
-          strict,
-        );
-        await expect(
-          sql`insert into json_param_test2 (doc) values (${'{"a":1}'})`.execute(
-            strict,
-          ),
-        ).rejects.toThrow(/is of type json but expression is of type/);
-      } finally {
-        await strict.destroy();
-      }
+    it('should let a number land where the context is not numeric', async () => {
+      // Kysely's own suite found these: a declared int4 cannot be
+      // coalesced with a varchar column, compared against jsonb, or
+      // assigned into one. Leaving the type to the server is what makes
+      // all three work.
+      await db
+        .insertInto('kysely_postgrejs_test')
+        .values({ name: 'a', amount: 1 })
+        .execute();
+      const coalesced = await sql<{ v: unknown }>`
+        select coalesce(name, ${5}) as v from kysely_postgrejs_test`.execute(
+        db,
+      );
+      expect(coalesced.rows[0].v).toStrictEqual('a');
+      const compared = await sql<{ v: boolean }>`
+        select ('{"a":1}'::jsonb->>'a') = ${1} as v`.execute(db);
+      expect(compared.rows[0].v).toStrictEqual(true);
+    });
+
+    it('should hand back text for a parameter with no context at all', async () => {
+      // The cost of the above, and the reason it is worth it only where
+      // the server has something to resolve against: with neither a type
+      // nor a context, PostgreSQL settles on `text`.
+      const bare = await sql<{ v: unknown }>`select ${5} as v`.execute(db);
+      expect(bare.rows[0].v).toStrictEqual('5');
     });
   });
 
