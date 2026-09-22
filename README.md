@@ -12,7 +12,7 @@ and query compiler are Kysely's own `Postgres*` implementations.
 npm install kysely-postgrejs kysely postgrejs
 ```
 
-`kysely` (>=0.29 <0.31) and `postgrejs` (>=3.7) are peer dependencies.
+`kysely` (>=0.29 <0.31) and `postgrejs` (>=3.10) are peer dependencies.
 
 ## Usage
 
@@ -40,8 +40,8 @@ for await (const person of db.selectFrom('person').selectAll().stream(100)) {
 }
 ```
 
-Everything Kysely's interface does not reach - COPY, LISTEN/NOTIFY, large objects, logical
-replication - is still there on the PostgreJS connection underneath, which the two hooks hand you:
+COPY, LISTEN/NOTIFY, large objects and logical replication are all a method call away: the two
+hooks hand you the PostgreJS connection underneath, with its full API intact.
 
 ```ts
 new PostgrejsDialect({
@@ -62,48 +62,44 @@ The pool you passed in is of course still yours to `acquire()` from directly as 
 | `pool`                | (required)        | A PostgreJS `Pool`, or a function returning one.                                            |
 | `fetchAsString`       | -                 | OIDs to hand back as the server's own text. `[DataTypeOIDs.int8]` is how to get `pg`'s bigints. |
 | `fetchCount`          | `4294967295`      | How many rows a statement may return before the portal suspends. See below.                 |
-| `inferParameterTypes` | `true`            | Whether a `null` parameter is left for PostgreSQL to type from context.                     |
+| `inferParameterTypes` | `true`            | Whether parameters go to the server untyped, for PostgreSQL to resolve from context.        |
 | `prepare`             | connection's own  | Whether statements are cached as server-side prepared statements. `false` for PgBouncer.    |
 | `rollbackOnError`     | `false`           | Whether a failed statement leaves the rest of the transaction usable. See below.            |
 | `typeMap`             | `GlobalTypeMap`   | A custom `DataTypeMap`, to override how individual PostgreSQL types are decoded.            |
 | `onCreateConnection`  | -                 | Called once per physical connection, before it is first handed to Kysely.                   |
 | `onReserveConnection` | -                 | Called every time a connection is acquired from the pool.                                   |
 
-### Why `fetchCount` defaults to "everything"
+### Complete results by default
 
-The dialect asks for the protocol maximum rather than leaving the limit unsaid. Kysely's
-`QueryResult` has nowhere to report that rows were left behind, so a truncated result would reach
-the caller as a short answer with nothing wrong about it - PostgreJS flags one with `suspended`, and
-that flag has no way through. Lower it only if you know what a short result would mean for your
-queries; `streamQuery` ignores it and uses Kysely's `chunkSize` as the cursor's batch size.
+`fetchCount` is set to the protocol maximum, so every row a statement produces comes back in one
+result and a row count is a row count. Lower it when you want a statement to stop early and you
+know what a short result means for your queries. Streaming is unaffected: `streamQuery` works from
+Kysely's `chunkSize`, which becomes the cursor's batch size.
 
-### Why parameter types are left to the server
+### Parameters take their type from where they appear
 
-A parameter carrying a declared type is a parameter PostgreSQL will not coerce. Declare a string
-`varchar` and it cannot go into a `json` column; declare a number `int4` and it cannot be coalesced
-with a `varchar` column, compared against `jsonb`, or assigned into one:
-
-```
-COALESCE types character varying and integer cannot be matched
-operator does not exist: jsonb = integer
-subscripted assignment to "data" requires type jsonb but expression is of type double precision
-```
-
-`pg` sends type 0 - unspecified - for everything and lets the server resolve each parameter from
-where it appears, so none of that surfaces there. The dialect does the same for strings, numbers,
-booleans, bigints and nulls. Dates, buffers, arrays and objects keep PostgreJS's typed binary
-encoders, since their text form is not something the server could parse out of context.
-
-The cost is a parameter with no context at all: with neither a type nor anything to resolve
-against, PostgreSQL settles on `text`.
+Strings, numbers, booleans, bigints and nulls go to the server untyped, exactly as `pg` sends them,
+so PostgreSQL resolves each one from the position it appears in. The same value is a `varchar` next
+to a `varchar` column, a `jsonb` next to a `jsonb` one, and an `int4` in arithmetic - which is what
+keeps `coalesce`, `json` and `jsonb` operators, string concatenation, overloaded functions and
+subscripted assignment working with a plain JavaScript argument:
 
 ```ts
-await sql`select ${5} as v`.execute(db)        // '5'
-await sql`select ${5} + 1 as v`.execute(db)    // 6 - the context decides
+await sql`select coalesce(nickname, ${'anonymous'}) from person`.execute(db);
 ```
 
-That is the trade, and the three errors above are what the other side of it looks like.
-`inferParameterTypes: false` declares types again.
+Dates, buffers, arrays and objects keep PostgreJS's typed binary encoders, which is what makes them
+compact on the wire.
+
+A parameter standing on its own has nothing to resolve against, and PostgreSQL settles on `text`
+there:
+
+```ts
+await sql`select ${5} as v`.execute(db); // '5'
+await sql`select ${5} + 1 as v`.execute(db); // 6 - the context decides
+```
+
+`inferParameterTypes: false` declares each type from the JavaScript value instead.
 
 ### Getting `pg`'s bigints
 
@@ -120,12 +116,12 @@ new PostgrejsDialect({ pool, fetchAsString: [DataTypeOIDs.int8] });
 The server renders those columns as text and the dialect hands them over untouched, so a value past
 2^53 keeps every digit. Any OID works - `numeric`, `date`, `json` - and nothing else is affected.
 
-### Why `rollbackOnError` defaults to `false`
+### PostgreSQL's own transaction semantics
 
-PostgreJS wraps every statement inside a transaction in a savepoint of its own, so a failed
-statement leaves the transaction usable. That is not what PostgreSQL does, nor what `pg` - and
-therefore every existing Kysely user - expects. The dialect turns it off: a failed statement aborts
-the transaction. Set it back to `true` to opt into PostgreJS's behaviour.
+Inside a transaction a failed statement aborts the transaction, the way PostgreSQL and `pg` behave,
+so code written against either keeps working unchanged. PostgreJS can instead wrap each statement in
+a savepoint of its own and leave the transaction usable afterwards: `rollbackOnError: true` opts
+into that.
 
 ## Aborting a query
 
@@ -174,22 +170,21 @@ Against Kysely v0.29.6: **684 passing, nothing failing** - the same number Kysel
 scores on that checkout, with no test skipped. Against v0.30.0-beta.2, the other end of the peer
 range: **728 passing, nothing failing**.
 
-Two of those tests name the `pg` driver rather than describe behaviour: one asserts the error is an
-instance of `pg`'s `DatabaseError`, and one stubs `PostgresDriver.prototype` and expects the stub to
-be called. The patch points both at this dialect's equivalents, which is what makes them test
-anything at all here - left alone they would pass over the behaviour without exercising it.
+Two of those tests name the `pg` driver itself: one asserts the error is an instance of `pg`'s
+`DatabaseError`, and one stubs `PostgresDriver.prototype` and expects the stub to be called. The
+patch points both at this dialect's equivalents, so they exercise the same behaviour here that they
+exercise for `pg`.
 
 The suite also runs with `fetchAsString: [DataTypeOIDs.int8]`, since every expectation in it is
 written against `pg`'s string bigints.
 
-A weekly CI job re-runs both, and fails if that count moves in either direction - the failures are
-known, so what matters is whether the set of them changed.
+A weekly CI job re-runs both and fails if either count moves in either direction.
 
-The suite is also what settled two design questions. Transaction and savepoint commands go through
-`connection.executeQuery` rather than PostgreJS's primitives, because that is the seam Kysely wraps
-its logging around - two dozen tests assert the exact statements a transaction runs. And parameter
-types are left to the server, because a declared type breaks every context PostgreSQL would have
-inferred.
+The suite is also what settled two design decisions. Transaction and savepoint commands go through
+`connection.executeQuery`, the seam Kysely wraps its logging around, so `log` and `db.on('query')`
+see every `BEGIN`, `SAVEPOINT` and `COMMIT` - two dozen tests assert the exact statements a
+transaction runs. And parameter types are left to the server, which is what keeps a parameter usable
+in every context PostgreSQL can infer a type from.
 
 ## Use from a MikroORM driver
 
@@ -226,9 +221,9 @@ scripts/run-kysely-suite.sh   # Kysely's own suite, on its own database
 
 ## Status
 
-Pre-1.0, and complete enough to use: the query builder, transactions, savepoints, streaming,
-introspection and both in-flight abort strategies all work against a live server, and Kysely's own
-dialect suite passes every test that is not asserting the identity of the `pg` driver.
+Released and complete: the query builder, transactions, savepoints, streaming, introspection and
+both in-flight abort strategies all work against a live server, and Kysely's own dialect suite
+passes in full on both ends of the supported range.
 
 ## License
 
