@@ -62,7 +62,7 @@ The pool you passed in is of course still yours to `acquire()` from directly as 
 | `pool`                | (required)        | A PostgreJS `Pool`, or a function returning one.                                            |
 | `fetchAsString`       | -                 | OIDs to hand back as the server's own text. `[DataTypeOIDs.int8]` is how to get `pg`'s bigints. |
 | `fetchCount`          | `4294967295`      | How many rows a statement may return before the portal suspends. See below.                 |
-| `inferParameterTypes` | `true`            | Whether PostgreSQL resolves each parameter's type from context, as it does for `pg`.        |
+| `inferParameterTypes` | `true`            | Whether a `null` parameter is left for PostgreSQL to type from context.                     |
 | `prepare`             | connection's own  | Whether statements are cached as server-side prepared statements. `false` for PgBouncer.    |
 | `rollbackOnError`     | `false`           | Whether a failed statement leaves the rest of the transaction usable. See below.            |
 | `typeMap`             | `GlobalTypeMap`   | A custom `DataTypeMap`, to override how individual PostgreSQL types are decoded.            |
@@ -79,19 +79,31 @@ queries; `streamQuery` ignores it and uses Kysely's `chunkSize` as the cursor's 
 
 ### Why parameter types are left to the server
 
-PostgreJS gives every parameter a type OID taken from its JavaScript value, so a string arrives
-declared as `varchar`. That is a declaration, not a hint, and PostgreSQL stops inferring:
+A parameter carrying a declared type is a parameter PostgreSQL will not coerce. Declare a string
+`varchar` and it cannot go into a `json` column; declare a number `int4` and it cannot be coalesced
+with a `varchar` column, compared against `jsonb`, or assigned into one:
 
-```ts
-await db.insertInto('log').values({ payload: '{"a":1}' }).execute()
-// column "payload" is of type json but expression is of type character varying
+```
+COALESCE types character varying and integer cannot be matched
+operator does not exist: jsonb = integer
+subscripted assignment to "data" requires type jsonb but expression is of type double precision
 ```
 
-`coalesce($1, 1)`, `$1 || name` and any call to an overloaded function fail the same way. `pg` sends
-type 0 - unspecified - and lets PostgreSQL resolve each parameter from where it appears, so none of
-this surfaces there. The dialect does the same by default. Only strings, numbers, booleans, bigints
-and nulls are affected; dates, buffers, arrays and objects keep PostgreJS's typed, binary encoding,
-which is both correct and faster. Set `inferParameterTypes: false` to declare types again.
+`pg` sends type 0 - unspecified - for everything and lets the server resolve each parameter from
+where it appears, so none of that surfaces there. The dialect does the same for strings, numbers,
+booleans, bigints and nulls. Dates, buffers, arrays and objects keep PostgreJS's typed binary
+encoders, since their text form is not something the server could parse out of context.
+
+The cost is a parameter with no context at all: with neither a type nor anything to resolve
+against, PostgreSQL settles on `text`.
+
+```ts
+await sql`select ${5} as v`.execute(db)        // '5'
+await sql`select ${5} + 1 as v`.execute(db)    // 6 - the context decides
+```
+
+That is the trade, and the three errors above are what the other side of it looks like.
+`inferParameterTypes: false` declares types again.
 
 ### Getting `pg`'s bigints
 

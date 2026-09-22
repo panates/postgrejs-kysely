@@ -51,15 +51,15 @@ nowhere to carry `suspended`, so a short result would reach the caller looking c
 `numAffectedRows`.
 
 **Parameters are `$1`-style**, passed as `options.params`, so Kysely's `CompiledQuery` needs no
-rewriting - but their **types** do. `Connection._query` derives an OID per parameter with
-`typeMap.determine(value)`, so a string arrives declared as `varchar` and PostgreSQL stops
-inferring:
-inserting into a `json` column, `coalesce($1, 1)`, `$1 || x` and any overloaded function all fail. `pg`
-sends OID 0 (unspecified) and lets the server resolve the parameter from context. Wrapping a value in
-`new BindParam(0, value)` asks PostgreJS for the same thing - `paramTypes[i] || 0` in Parse, the text
-branch in Bind - and that is what the dialect does for strings, numbers, booleans, bigints and nulls.
-Dates, buffers, arrays and objects keep PostgreJS's typed binary encoders; their text form is not
-something the server could parse out of context.
+rewriting - but their types matter. A declared type is one PostgreSQL will not coerce: since 3.9
+PostgreJS sends strings and dates unspecified itself (`isUnspecifiedParam`), and the dialect wraps
+numbers, booleans, bigints and nulls in `new BindParam(0, value)` for the same reason. Kysely's
+suite is what proved the numbers belong there too - a declared `int4` cannot be coalesced with a
+`varchar` column, compared against `jsonb`, or assigned into one, and narrowing the wrapping to
+`null` alone failed three of its tests.
+
+The cost, measured and accepted: a parameter with neither a type nor a context resolves to `text`,
+so `select $1` with a 5 answers `'5'`. There is a live test pinning both sides of that.
 
 **Streaming is a cursor.** `query(sql, { cursor: true })` puts a `Cursor` on `result.cursor`, which has
 `next()`, `fetch(n)`, `close()`, `isClosed`, `Symbol.asyncDispose` and `Symbol.asyncIterator`. Iterating
@@ -105,7 +105,8 @@ Chosen deliberately, and not worth re-opening without new evidence:
 - `rollbackOnError: false` on every query - PostgreSQL's semantics, not PostgreJS's.
 - `fetchCount` defaults to the protocol maximum: Kysely cannot carry PostgreJS's `suspended`, so a
   short result would look complete.
-- Parameter types are left to the server; `inferParameterTypes: false` opts out.
+- Parameter types are left to the server for strings, numbers, booleans, bigints and nulls;
+  `inferParameterTypes: false` opts out. Narrowing this was tried and reverted - see above.
 - Transaction and savepoint commands go through `executeQuery`, so Kysely can see them.
 - `int8` stays PostgreJS-native (number, then BigInt) by default; `fetchAsString: [DataTypeOIDs.int8]`
   is the opt-in for `pg`'s strings, passed straight through to PostgreJS.
@@ -133,6 +134,17 @@ Chosen deliberately, and not worth re-opening without new evidence:
 
 ## Working conventions
 
+- **No fixups here. A gap in PostgreJS is reported, not worked around.** When something this
+  adapter needs is missing, wrong or slower in `postgrejs`, do not patch around it in this package:
+  no post-decode value rewriting, no shim, no vendored parser, no `pg`-compatibility table, no
+  monkey-patching of the client, no "temporary" branch written to suit the behaviour as it is
+  today. Stop there and write the finding up as a task file in `../postgrejs/.claude/<short-name>.md`
+  - what was asked of the client, what it answered, what it should answer, and the smallest
+  reproduction that shows the difference. That repo's own session picks it up and fixes it at the
+  source. Otherwise every adapter ends up carrying its own copy of the same correction, and the
+  client's behaviour gets defined by whichever adapter last worked around it. A workaround is
+  allowed only when the user is asked for one and says yes; it then carries a comment naming the
+  task file it waits on, so it can be removed when the fix lands.
 - Do not sign commits or pull requests on the assistant's behalf - no `Co-Authored-By: Claude` trailer,
   no "Generated with Claude Code" line.
 - Run `git status` before staging. Commit only the files the change is about.

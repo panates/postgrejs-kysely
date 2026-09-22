@@ -31,16 +31,16 @@ export interface PostgrejsDialectConfig {
 
   /**
    * Whether each parameter's PostgreSQL type is left to the server to
-   * resolve from where it appears in the query - what `pg` does, and what
-   * Kysely's users therefore expect.
+   * resolve from where it appears, the way `pg` does.
    *
-   * Defaults to `true`. PostgreJS otherwise declares a type derived from
-   * the JavaScript value, which makes a string a `varchar` and breaks
-   * every context where PostgreSQL would have inferred something else: a
-   * `json` column, a `coalesce` of mixed types, `||`, an overloaded
-   * function. Only strings, numbers, booleans, bigints and nulls are
-   * affected - dates, buffers, arrays and objects keep PostgreJS's typed,
-   * binary encoding either way.
+   * Defaults to `true`. A declared type is one PostgreSQL will not
+   * coerce: a string declared `varchar` cannot go into a `json` column,
+   * and a number declared `int4` cannot be coalesced with a `varchar`
+   * column, compared against `jsonb`, or assigned into one. Strings,
+   * numbers, booleans, bigints and nulls therefore go out unspecified;
+   * dates, buffers, arrays and objects keep PostgreJS's typed binary
+   * encoding. The cost is that a parameter with no context at all
+   * resolves to `text`, so `select $1` with a 5 answers `'5'`.
    */
   inferParameterTypes?: boolean;
 
