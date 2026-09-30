@@ -196,6 +196,21 @@ async function main() {
     if (described) console.log(`      ${described}`);
   }
 
+  /**
+   * One scenario's worth of work before anything is recorded, thrown
+   * away. Each scenario already warms itself, but the *first* scenario
+   * of a run also pays for whatever the machine was doing a moment ago:
+   * measured, a point read that reads 0.303 ms against 0.267 in a
+   * settled run came out at 0.632 against 0.574 as the opening scenario,
+   * while the identical read one scenario later was 0.283 against 0.248.
+   * Both clients slowed by the same factor, so the ratio and the winner
+   * survived it - but the absolute figures in that row did not, and a
+   * table cannot print a row that its own next row contradicts.
+   */
+  const settle = scenarios[0];
+  for (let round = 0; round < 3; round++)
+    for (const name of names) await timedBatch(settle, dbFor(settle, name));
+
   for (const scenario of scenarios) {
     const pairs = PAIRS || scenario.pairs;
     for (const name of names) {
