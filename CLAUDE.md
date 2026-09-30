@@ -127,10 +127,36 @@ Chosen deliberately, and not worth re-opening without new evidence:
   tested without a server.
 - `test/B-live/` - the same behaviour against a live PostgreSQL, including the 1000-row truncation
   regression and both abort strategies (asserted against `pg_stat_activity`, not just the promise).
+  `value-shapes.spec.ts` runs the README's "What changes when you switch" table through both this
+  dialect and Kysely's `pg` one, so that table is a test rather than a note.
 - Code style follows the PostgreJS repo's own `CLAUDE.md`: member order, `protected` over `private`.
 - `npm run lint` fails on unsorted imports; `npm run lint:fix` sorts them.
 - c8 reports one unreachable branch on `executeQuery`'s `catch`/`finally` line. It is an instrumentation
   artifact - don't chase it.
+
+## Benchmarks
+
+`benchmark/` measures this dialect against Kysely's own `PostgresDialect` over `pg`, through Kysely
+on both sides, so the SQL is identical and only the driver differs. `npm run bench` measures and
+writes `benchmark/results/latest.json`; `npm run bench:report` renders that file into
+`doc/BENCHMARKS.md` and the README's `<!-- bench:… -->` regions, **prose included** - a sentence
+makes a claim and goes stale exactly like a number, so no figure is written by hand.
+
+Four rules the harness is built on, each of them a mistake someone already paid for:
+
+- **Memory is three questions**, not one: held between calls, allocated per call, high-water under
+  load. They rank the two clients differently. A per-call *peak* is not measurable - the account is
+  in `benchmark/heap-worker.mjs`'s header - so what is reported is total allocation over a batch.
+- **`heapUsed + external`, never `heapUsed`**, because a `bytea` is a `Buffer`. `--trace-gc` sees
+  the JS heap only, so it is stored as a cross-check and never printed.
+- **One child process per client** for memory: in a shared process the baseline is taken with both
+  already up, so what a client keeps sits under the window rather than in it.
+- **Every scenario binds a parameter and reads stored values.** Without a parameter `pg` takes the
+  simple protocol and the run compares two protocols; generated values add a server cost both pay,
+  which compresses the ratio towards 1.
+
+Do not run anything else on the machine during a run, and do not call a 5-repetition difference a
+regression - both have cost a re-measurement next door.
 
 ## Working conventions
 
