@@ -70,7 +70,7 @@ say "Pointing the postgres variant at this dialect"
 git -C "$KYSELY_DIR" apply "$REPO_DIR/scripts/kysely-suite.patch"
 
 say "Building this dialect"
-(cd "$REPO_DIR" && npm run build)
+(cd "$REPO_DIR" && npx rman build)
 
 # The dialect is installed as a real directory rather than a link: Node
 # resolves a linked package's own imports from the link's target, and

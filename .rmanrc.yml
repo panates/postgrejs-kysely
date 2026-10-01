@@ -1,0 +1,14 @@
+extends: '@panates/rman-preset'
+
+# The preset copies README.md and LICENSE into the build directory, and
+# declares that under `[platform:node]` - a base's selector block beats a
+# consumer's unmarked key, so this has to be a selector block too or it
+# is dropped in silence. This package has shipped its CHANGELOG.md in the
+# tarball since 1.0.0; the list replaces the default rather than adding
+# to it.
+'[/]':
+  vars:
+    copyFiles:
+      - README.md
+      - LICENSE
+      - CHANGELOG.md

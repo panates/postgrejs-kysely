@@ -65,10 +65,10 @@ jobs:
         run: npm install --no-save kysely@${{ matrix.kysely }}
 
       - name: Run linter test
-        run: npm run lint
+        run: npx rman lint
 
       - name: Run circular dependency test
-        run: npm run check
+        run: npx rman check
 
       - name: Run compile test
         run: npm run compile

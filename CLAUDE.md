@@ -130,7 +130,8 @@ Chosen deliberately, and not worth re-opening without new evidence:
   `value-shapes.spec.ts` runs the README's "What changes when you switch" table through both this
   dialect and Kysely's `pg` one, so that table is a test rather than a note.
 - Code style follows the PostgreJS repo's own `CLAUDE.md`: member order, `protected` over `private`.
-- `npm run lint` fails on unsorted imports; `npm run lint:fix` sorts them.
+- `rman lint` fails on unsorted imports; `rman lint --fix` sorts them. Lint, format, check,
+  clean and build are rman commands from `@panates/rman-preset`, not package scripts - see below.
 - c8 reports one unreachable branch on `executeQuery`'s `catch`/`finally` line. It is an instrumentation
   artifact - don't chase it.
 
@@ -157,6 +158,31 @@ Four rules the harness is built on, each of them a mistake someone already paid 
 
 Do not run anything else on the machine during a run, and do not call a 5-repetition difference a
 regression - both have cost a re-measurement next door.
+
+## Build and release
+
+Single-package: the repository *is* the package, which decides most of the rman answers. `.rmanrc.yml`
+inherits `@panates/rman-preset` and carries one local key - `group`, `version.cascade` and
+`changelog.groupBy` are for repositories with packages to group, and setting them here would change
+nothing.
+
+- **Build, lint, format, check and clean are rman commands, not scripts.** The preset's `run.build`
+  is `before: [rman check, rman lint, rman clean]`, a tsc exec, and an `after` that copies files,
+  writes the build manifest and stamps the version. A leftover `build` script would *win* over that
+  exec and a leftover `prebuild` would run alongside the `before` - both silently, so `rman build`'s
+  step rows are the check: each step appears once.
+- **The one local key is `vars.copyFiles`, and it sits under `"[/]"`.** The preset declares `vars`
+  inside `[platform:node]`, and a base's selector block beats a consumer's unmarked key - written
+  unmarked, the override was dropped without a word. `rman config --from-root` is what proves it
+  landed.
+- **`private: true` is gone on purpose.** rman reads that flag on the *source* package and skips it
+  before the build directory is involved, so on a single-package repository it means the release
+  bumps, tags and cuts a GitHub release while the registry gets nothing. `prepublishOnly` is the
+  replacement guard; `rman publish --dry-run` must show a `publish` row, never `skip - private
+  package`.
+- `CHANGELOG.md` is rman's now, with a `rman:documented-up-to` marker; `rman version` writes the
+  entry into the release commit. The preset sets `changelog.unreleased: false`, so a bare
+  `rman changelog` prints nothing - pass `--from <tag>`.
 
 ## Working conventions
 

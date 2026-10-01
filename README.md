@@ -416,8 +416,10 @@ The unit tests need nothing; the live ones need a PostgreSQL at `127.0.0.1:5432`
 ```sh
 npm test          # unit + live tests
 npm run citest    # the same, with coverage
-npm run qc        # lint and circular dependency check
 npm run compile   # type check without emitting
+rman lint         # eslint, with the organization's flags
+rman check        # circular dependencies
+rman build        # compile into build/, ready to publish
 
 scripts/run-kysely-suite.sh   # Kysely's own suite, on its own database
 npm run bench                 # the benchmark, against pg through Kysely
