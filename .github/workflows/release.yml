@@ -13,62 +13,67 @@ on:
     branches:
       - main
 
-permissions:
-  id-token: write  # Required for OIDC
-  contents: read
-
 # Only one run at a time
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
+  # Answers "did this commit arrive through a pull request, and from which branch?" - which the
+  # `test` job's own `if:` cannot ask, because a job condition is evaluated before any job runs and
+  # a push payload says nothing about a pull request. What this replaces was a commit-message test
+  # (`startsWith(msg, 'Merge pull request') && contains(msg, '/dev')`), which recognises one of the
+  # three merge buttons and, being a substring test, also swallows `develop` and `dev-hotfix`.
+  source:
+    uses: panates/github-actions/.github/workflows/pr-source.yaml@v3
+    permissions:
+      contents: read
+      pull-requests: read
+
   test:
+    needs: source
+    # `head-ref != 'dev'` is an exact comparison. An empty `head-ref` means the commit came from no
+    # pull request - a direct push, or a local merge - and runs the tests, which is the safe
+    # direction: nothing recorded that this exact commit was tested anywhere.
     if: >
       !contains(github.event.head_commit.message, 'no-release') &&
       (
         (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests != 'true') ||
         (
           github.event_name == 'push' &&
-          !(
-            contains(github.event.head_commit.message, 'no-test') ||
-            ( 
-              startsWith(github.event.head_commit.message, 'Merge pull request') &&
-              contains(github.event.head_commit.message, '/dev')
-            )
-          )
+          !contains(github.event.head_commit.message, 'no-test') &&
+          needs.source.outputs.head-ref != 'dev'
         )
       )
     uses: ./.github/workflows/test.yml
-    secrets:
-      PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-
-
-  release_after_test:
-    # Wait for "test" job
-    needs: test
-    uses: panates/github-actions/.github/workflows/node-release.yaml@v1
-    secrets:
-      PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   release:
+    needs: [source, test]
+    # `always()` because `needs` alone would block this whenever `test` is *skipped*, which is the
+    # normal path for a `no-test` commit or a pull request merged from dev. This one condition
+    # replaces the pair of mirror-image jobs that used to be here - `release_after_test` and
+    # `release` with the test condition negated - which meant the release call was written twice and
+    # the two conditions had to be kept in step by hand.
+    #
+    # `needs.source.result == 'success'` is the second lock on the same door: this job accepts
+    # `test` being skipped, and `test` is skipped whenever `source` fails, so without it an API
+    # hiccup in the lookup would release untested code.
     if: >
-      !contains(github.event.head_commit.message, 'no-release') &&
-      !(
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.skip-tests != 'true') ||
-        (
-          github.event_name == 'push' &&
-          !(
-            contains(github.event.head_commit.message, 'no-test') ||
-            ( 
-              startsWith(github.event.head_commit.message, 'Merge pull request') &&
-              contains(github.event.head_commit.message, '/dev')
-            )
-          )
-        )
-      )
-    uses: panates/github-actions/.github/workflows/node-release.yaml@v1
+      always() && !cancelled() &&
+      needs.source.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      !contains(github.event.head_commit.message, 'no-release')
+    uses: panates/github-actions/.github/workflows/node-release.yaml@v3
+    # Declared on the calling job, because that is what governs a reusable workflow's permissions.
+    # The old workflow-level `contents: read` was the wrong half of this: `rman version --push`, the
+    # GitHub Release and the merge back into dev all write. `id-token: write` is npm Trusted
+    # Publishing (OIDC).
+    permissions:
+      id-token: write
+      contents: write
     secrets:
-      PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      # PERSONAL_ACCESS_TOKEN is gone: every `@panates/*` dependency answers 200 from the public
+      # registry unauthenticated and there is no .npmrc, so it authenticated nothing. The checkout
+      # and `rman version --push` use the job's own GITHUB_TOKEN, which is also why a release does
+      # not trigger a second run of itself.
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

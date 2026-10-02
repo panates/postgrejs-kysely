@@ -14,14 +14,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# The called workflow only checks out and runs quality checks, and a called
-# workflow inherits the caller's permissions, so the token is pinned to read
-# here rather than inherited from the repository default.
-permissions:
-  contents: read
-
 jobs:
   qc:
-    uses: panates/github-actions/.github/workflows/node-qc.yaml@v1
-    secrets:
-      PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+    uses: panates/github-actions/.github/workflows/node-qc.yaml@v3
+    # On the calling job: that is what governs a reusable workflow's permissions, and this one only
+    # ever reads the repository.
+    permissions:
+      contents: read
+    with:
+      # The default is `npm run qc`, and that script is gone - lint and check are commands the
+      # preset contributes now, so there is nothing left for a script to wrap.
+      qc_script: 'rman lint && rman check'

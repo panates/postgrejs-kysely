@@ -1,8 +1,9 @@
 name: Test
 on:
+  # No secrets: every `@panates/*` dependency here answers 200 from the
+  # public registry unauthenticated and the repository has no .npmrc, so
+  # PERSONAL_ACCESS_TOKEN was authenticating nothing.
   workflow_call:
-    secrets:
-      PERSONAL_ACCESS_TOKEN:
 
   # Can be run manually
   workflow_dispatch:
@@ -52,24 +53,34 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
+      # `@v2` checks the repository out itself (actions/checkout inside the
+      # action), so a separate checkout step here would do it twice.
+      # `install: 'ci'` installs exactly what the lockfile pins, where `@v1`
+      # deleted package-lock.json first and installed whatever resolved that
+      # morning. `rman-version` replaces `@v1`'s unpinned global install, and
+      # pins the major rather than a release.
       - name: Setup Environment
-        uses: panates/gh-setup-node@v1
+        uses: panates/gh-setup-node@v2
         with:
           node-version: ${{ matrix.node }}
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          rman-version: '2'
+          install: 'ci'
 
       - name: Install the kysely version under test
         run: npm install --no-save kysely@${{ matrix.kysely }}
 
+      # The preset's own commands, not npm scripts: `lint` and `check` were
+      # scripts, and are commands `@panates/rman-preset` contributes now, so
+      # the flags are pinned in one place - dpdm's `--exit-code circular:1`
+      # above all, without which it reports a cycle and still exits 0.
       - name: Run linter test
-        run: npx rman lint
+        run: rman lint
 
       - name: Run circular dependency test
-        run: npx rman check
+        run: rman check
 
+      # Still a script: the preset builds with `tsc -b` and contributes no
+      # typecheck command, and this is the no-emit half of the same thing.
       - name: Run compile test
         run: npm run compile
 
