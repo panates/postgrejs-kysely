@@ -1,6 +1,30 @@
 # Changelog
 
-<!-- rman:documented-up-to e9c5b735185fdb6969e2654090b9f4a2ccdda364 -->
+<!-- rman:documented-up-to a13fa6fec34f8c99f10b1c50ff257b79fbccad0b -->
+
+## v1.2.0 (2026-10-05)
+
+### ✨ Features
+
+- measure this dialect against pg, and rewrite the README around it (219ef0c)
+
+### 🐛 Bug Fixes
+
+- **benchmark:** settle the machine before the first scenario is timed (0ee166e)
+- **ci:** restore the type check as a script, and point CI at it (27c05a1)
+- **test:** stop pinning the time value to a time zone (deb47dc)
+
+### 📦 Build System
+
+- adopt rman 2 and the shared preset (96d2858)
+- move to rman 2.9.0 and preset 1.8.1 (f7b0857)
+- move to rman 2.11.0 and preset 1.8.2 (8b5f40a)
+
+### 🤖 Continuous Integration
+
+- move to the shared v3 workflows (0f93919)
+
+---
 
 ## v1.1.1 (2026-09-22)
 
