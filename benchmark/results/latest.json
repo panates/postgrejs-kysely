@@ -586,7 +586,7 @@
     },
     {
       "name": "insert a 4MB bytea",
-      "note": "1 row holding 1 value of 4 MB, binary on both sides",
+      "note": "1 row holding 1 value of 4 MB - the clock is mostly the server",
       "group": "Write",
       "iters": 3,
       "pairs": 41,

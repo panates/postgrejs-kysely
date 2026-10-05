@@ -212,7 +212,7 @@ the same schema types, the same queries, the same migrations. What you get for i
 | bytea of 4MB - 1 row holding 1 value of 4 MB                                                           | 34.175 ms<br>51.7 MB/call           | **15.566 ms**<br>**4.1 MB**/call | **2.20x**<br>**-92%** |
 | insert one row - 1 row, six parameters                                                                 | 0.336 ms<br>**22 KB**/call          | **0.291 ms**<br>30 KB/call       | **1.16x**<br>+33%     |
 | insert 500 rows - 500 rows in 1 statement, 2500 parameters that fill their types                       | 4.149 ms<br>**1.4 MB**/call         | **3.383 ms**<br>1.5 MB/call      | **1.23x**<br>+9%      |
-| insert a 4MB bytea - 1 row holding 1 value of 4 MB, binary on both sides                               | 19.470 ms<br>**3.3 MB**/call        | **17.370 ms**<br>4.1 MB/call     | **1.12x**<br>+24%     |
+| insert a 4MB bytea - 1 row holding 1 value of 4 MB - the clock is mostly the server                    | 19.470 ms<br>**3.3 MB**/call        | **17.370 ms**<br>4.1 MB/call     | **1.12x**<br>+24%     |
 | insert a 100k int4[] - 1 row holding 1 array of 100 000 values, text on both sides                     | 18.573 ms<br>27.3 MB/call           | **13.414 ms**<br>**1.7 MB**/call | **1.38x**<br>**-94%** |
 | twenty inserts in a transaction - 20 rows, one statement each, inside one transaction                  | 6.633 ms<br>**289 KB**/call         | **5.884 ms**<br>406 KB/call      | **1.13x**<br>+40%     |
 

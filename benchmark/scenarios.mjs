@@ -331,8 +331,24 @@ export const SCENARIOS = [
     },
   },
   {
+    /**
+     * **Read the allocation column, not the clock.**
+     *
+     * Measured by running the same insert with the payload generated
+     * server-side, so the send costs nothing: 13.25 ms against the 19.47 the
+     * full call takes, which puts **two thirds of this row's clock in
+     * PostgreSQL** writing 4 MB. The remaining third is two clients pushing
+     * bytes through a socket at the same speed - isolated in
+     * `../postgrejs-typeorm`, where `select length($1::bytea)` on the same
+     * payload is 1.03x. So the 1.12x here is mostly not either driver, and a
+     * reader who takes it for one has been misled by the row.
+     *
+     * What *is* a client measurement is what it costs to get those bytes
+     * out, and on this driver that is a loss rather than a win - which is
+     * the other reason to keep the row.
+     */
     name: 'insert a 4MB bytea',
-    note: '1 row holding 1 value of 4 MB, binary on both sides',
+    note: '1 row holding 1 value of 4 MB - the clock is mostly the server',
     group: 'Write',
     iters: 3,
     pairs: 41,
