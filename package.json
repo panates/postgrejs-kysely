@@ -33,6 +33,7 @@
     "typescript": "6.0.3"
   },
   "scripts": {
+    "typecheck": "tsc -b tsconfig-build.json --noEmit",
     "test": "mocha",
     "precitest": "rman clean",
     "citest": "c8 mocha",

@@ -416,7 +416,7 @@ The unit tests need nothing; the live ones need a PostgreSQL at `127.0.0.1:5432`
 ```sh
 npm test          # unit + live tests
 npm run citest    # the same, with coverage
-npm run compile   # type check without emitting
+npm run typecheck # type check without emitting
 rman lint         # eslint, with the organization's flags
 rman check        # circular dependencies
 rman build        # compile into build/, ready to publish

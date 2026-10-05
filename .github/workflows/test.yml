@@ -81,8 +81,8 @@ jobs:
 
       # Still a script: the preset builds with `tsc -b` and contributes no
       # typecheck command, and this is the no-emit half of the same thing.
-      - name: Run compile test
-        run: npm run compile
+      - name: Run type check
+        run: npm run typecheck
 
       - name: Run unit tests
         run: npm run citest
