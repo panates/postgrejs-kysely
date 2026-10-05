@@ -11,7 +11,7 @@
   "devDependencies": {
     "@panates/eslint-config": "^2.2.0",
     "@panates/eslint-config-ts": "^2.2.1",
-    "@panates/rman-preset": "^1.8.1",
+    "@panates/rman-preset": "^1.8.2",
     "@panates/tsconfig": "^2.1.7",
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.16.13",
@@ -29,7 +29,7 @@
     "pg": "^8.23.1",
     "postgrejs": "^3.12.1",
     "prettier": "^3.9.9",
-    "rman": "^2.9.0",
+    "rman": "^2.11.0",
     "typescript": "6.0.3"
   },
   "scripts": {
