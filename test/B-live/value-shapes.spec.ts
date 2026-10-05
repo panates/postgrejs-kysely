@@ -113,12 +113,6 @@ describe('value shapes against pg (live)', () => {
       ours: 'number 12.34',
     },
     {
-      name: 'time',
-      sql: `select '10:20:30'::time as v`,
-      pg: 'string "10:20:30"',
-      ours: 'Date 1970-01-01T08:20:30.000Z',
-    },
-    {
       name: 'int4range',
       sql: `select '[1,5)'::int4range as v`,
       pg: 'string "[1,5)"',
@@ -173,6 +167,26 @@ describe('value shapes against pg (live)', () => {
       expect(shape(await read(theirs, testCase.sql))).toEqual(testCase.pg);
       expect(shape(await read(ours, testCase.sql))).toEqual(testCase.ours);
     });
+
+  /**
+   * `time` has a row of its own because its value cannot be pinned as a
+   * string. PostgreJS builds the Date from the time components in local
+   * time, so the instant it lands on moves with the machine's zone - an
+   * expectation of `1970-01-01T08:20:30.000Z` passes at UTC+2 and fails
+   * on a UTC runner, which is how CI found it. What is stable, and what
+   * the README claims, is the shape: a string there, a Date here reading
+   * the same wall clock.
+   */
+  it('should differ from pg on time, as documented', async () => {
+    const text = `select '10:20:30'::time as v`;
+    expect(shape(await read(theirs, text))).toEqual('string "10:20:30"');
+    const ours_ = await read(ours, text);
+    expect(ours_).toBeInstanceOf(Date);
+    const clock = ours_ as Date;
+    expect(
+      [clock.getHours(), clock.getMinutes(), clock.getSeconds()].join(':'),
+    ).toEqual('10:20:30');
+  });
 
   /**
    * The one difference the README tells people how to undo, so it is
