@@ -31,14 +31,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
+      # `@v2` checks out itself, installs from the lockfile and puts rman on
+      # the PATH - which the suite script needs, since it builds this dialect
+      # with `rman build` before pointing Kysely at it.
       - name: Setup Environment
-        uses: panates/gh-setup-node@v1
+        uses: panates/gh-setup-node@v2
         with:
           node-version: '22'
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          rman-version: '2'
+          install: 'ci'
 
       - name: Run Kysely's dialect suite against this dialect
         run: scripts/run-kysely-suite.sh
