@@ -1,6 +1,19 @@
 # Changelog
 
-<!-- rman:documented-up-to a13fa6fec34f8c99f10b1c50ff257b79fbccad0b -->
+<!-- rman:documented-up-to b60cfe166e126812c607076709c441756040d4ce -->
+
+## v1.2.1 (2026-10-06)
+
+### 🧹 Chores
+
+- sync lockfile (1cc575b)
+
+### 💬 General Changes
+
+- say that the 4MB write's clock is mostly PostgreSQL (c6ace54)
+- stop billing PostgreJS for a feature pg does not have (85c175b)
+
+---
 
 ## v1.2.0 (2026-10-05)
 
