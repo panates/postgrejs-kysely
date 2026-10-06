@@ -18,6 +18,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { Pool as PgPool } from 'pg';
 import {
+  CLIENT_CONFIG,
   CONN,
   CONTROL,
   DDL,
@@ -332,8 +333,13 @@ async function main() {
         measuredAt: new Date().toISOString(),
         versions,
         // which configuration was measured, since `fetchAsString` would
-        // change what crosses the socket and what gets decoded
+        // change what crosses the socket and what gets decoded, and
+        // `asyncErrorHandling` bills one client for a feature the other
+        // does not have - written into the record so the report can state
+        // them from the run rather than from a sentence someone has to
+        // remember to update
         dialectConfig: DIALECT_CONFIG,
+        clientConfig: CLIENT_CONFIG,
         scenarios: results.map(
           ({
             scenario,

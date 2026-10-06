@@ -30,6 +30,24 @@ export const SEED_ROWS = 5000;
  */
 export const DIALECT_CONFIG = { fetchAsString: undefined };
 
+/**
+ * What the PostgreJS pool is opened with, and the one setting that is not
+ * a default.
+ *
+ * `asyncErrorHandling` makes a rejected query's stack point at the line
+ * that called it rather than at a frame inside the client, and capturing
+ * that costs CPU - `connection.js`'s `_captureErrorStack` resolves it as
+ * `options.asyncErrorHandling ?? config.asyncErrorHandling ?? true`, and
+ * this dialect forwards six query options but not that one, so the pool's
+ * setting is what decides. `pg` offers nothing of the kind, so leaving it
+ * on bills one side for a feature the comparison does not cover.
+ *
+ * It is not turned off because it moves the answer. Measured in the
+ * drizzle round, it is worth about 3% on the one scenario with several
+ * calls in flight at once and nothing anywhere else.
+ */
+export const CLIENT_CONFIG = { asyncErrorHandling: false };
+
 /** Built once, so a write scenario times the send and not the making. */
 export const BLOB_4MB = Buffer.alloc(4 * 1024 * 1024, 0x78);
 export const ARRAY_100K = Array.from(
@@ -393,7 +411,7 @@ export const SCENARIOS = [
 export function openDatabases(pooled = false) {
   const max = pooled ? 10 : 1;
   const pgPool = new PgPool({ ...CONN, max });
-  const jsPool = new PgjsPool({ ...CONN, pool: { max } });
+  const jsPool = new PgjsPool({ ...CONN, ...CLIENT_CONFIG, pool: { max } });
   return {
     dbs: {
       [CONTROL]: new Kysely({ dialect: new PostgresDialect({ pool: pgPool }) }),
@@ -415,7 +433,9 @@ export function openDatabases(pooled = false) {
  */
 export async function describeScenarios(scenarios) {
   const captured = [];
-  const pool = new PgjsPool({ ...CONN, pool: { max: 1 } });
+  // the same configuration as the measured pool, so the SQL printed comes
+  // from a client set up like the one the numbers came from
+  const pool = new PgjsPool({ ...CONN, ...CLIENT_CONFIG, pool: { max: 1 } });
   const db = new Kysely({
     dialect: new PostgrejsDialect({ pool }),
     log: event => {

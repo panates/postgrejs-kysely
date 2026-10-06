@@ -11,11 +11,11 @@ types, your queries, your migrations.
 
 <!-- bench:intro -->
 
-It is faster where it counts, and it allocates far less doing it. A 4 MB `bytea` comes back in 15.6
-ms against 34.2 ms, on 4.1 MB a call against 51.7 MB - `pg` reads that column as hex text, twice the
-size, off the JS heap where a heap figure alone cannot see it. A 100k-element `int4[]` runs 3.3x, on
-2.2 MB against 22.7 MB. Ordinary queries gain less and gain it repeatably: a point read is the
-faster of the two in 92 of 101 alternated pairs. All of it measured through Kysely against Kysely's
+It is faster where it counts, and it allocates far less doing it. A 4 MB `bytea` comes back in 15.8
+ms against 37.2 ms, on 4.1 MB a call against 51.6 MB - `pg` reads that column as hex text, twice the
+size, off the JS heap where a heap figure alone cannot see it. A 100k-element `int4[]` runs 3.9x, on
+2.2 MB against 22.9 MB. Ordinary queries gain less and gain it repeatably: a point read is the
+faster of the two in 100 of 101 alternated pairs. All of it measured through Kysely against Kysely's
 own `PostgresDialect` over `pg`, on the same server: [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md).
 
 <!-- /bench:intro -->
@@ -183,7 +183,7 @@ the same schema types, the same queries, the same migrations. What you get for i
 
 <!-- bench:payload -->
 
-- **Faster where the payload is large** - 2.2x on a 4 MB `bytea` and 3.3x on a 100k-element
+- **Faster where the payload is large** - 2.4x on a 4 MB `bytea` and 3.9x on a 100k-element
   `int4[]`, on a fraction of the memory, because the values arrive in PostgreSQL's binary format
   rather than as text to be parsed.
 
@@ -200,23 +200,23 @@ the same schema types, the same queries, the same migrations. What you get for i
 
 | Scenario                                                                                               | node-postgres<br>allocated per call | postgrejs<br>allocated per call  |                       |
 | ------------------------------------------------------------------------------------------------------ | ----------------------------------- | -------------------------------- | --------------------- |
-| point read - 1 row of 9 columns                                                                        | 0.313 ms<br>**27 KB**/call          | **0.268 ms**<br>30 KB/call       | **1.17x**<br>+13%     |
-| point read through the builder - the same row, selected with selectFrom().where() instead of a sql tag | 0.311 ms<br>**29 KB**/call          | **0.267 ms**<br>33 KB/call       | **1.16x**<br>+14%     |
-| page of 200 - 200 rows of 9 columns, mixed types                                                       | 1.452 ms<br>479 KB/call             | **1.267 ms**<br>**348 KB**/call  | **1.15x**<br>**-27%** |
-| concurrent reads - 20 reads at once of 1 row each, pool of 10                                          | 1.673 ms<br>**433 KB**/call         | **1.494 ms**<br>511 KB/call      | **1.12x**<br>+18%     |
-| int4[] of 100k, full width - 1 row holding 1 array of 100 000 values that use the whole type           | 26.082 ms<br>22.7 MB/call           | **7.879 ms**<br>**2.2 MB**/call  | **3.31x**<br>**-90%** |
-| float8 of 5k rows, full width - 5000 rows of 1 value, eight bytes against seventeen significant digits | 1.241 ms<br>1.4 MB/call             | **0.788 ms**<br>**1.2 MB**/call  | **1.57x**<br>**-13%** |
-| float8[] of 5k in one row - 1 row holding 1 array of the same 5000 values                              | 2.286 ms<br>2.9 MB/call             | **0.664 ms**<br>**228 KB**/call  | **3.44x**<br>**-92%** |
-| uuid of 5k rows - 5000 rows of 1 value, sixteen bytes against thirty-six characters                    | 1.447 ms<br>1.5 MB/call             | **1.067 ms**<br>1.5 MB/call      | **1.36x**<br>level    |
-| box of 5k rows - 5000 rows of 1 value, four float8s against coordinates that use them                  | 2.543 ms<br>1.9 MB/call             | **1.358 ms**<br>1.9 MB/call      | **1.87x**<br>level    |
-| bytea of 4MB - 1 row holding 1 value of 4 MB                                                           | 34.175 ms<br>51.7 MB/call           | **15.566 ms**<br>**4.1 MB**/call | **2.20x**<br>**-92%** |
-| insert one row - 1 row, six parameters                                                                 | 0.336 ms<br>**22 KB**/call          | **0.291 ms**<br>30 KB/call       | **1.16x**<br>+33%     |
-| insert 500 rows - 500 rows in 1 statement, 2500 parameters that fill their types                       | 4.149 ms<br>**1.4 MB**/call         | **3.383 ms**<br>1.5 MB/call      | **1.23x**<br>+9%      |
-| insert a 4MB bytea - 1 row holding 1 value of 4 MB - the clock is mostly the server                    | 19.470 ms<br>**3.3 MB**/call        | **17.370 ms**<br>4.1 MB/call     | **1.12x**<br>+24%     |
-| insert a 100k int4[] - 1 row holding 1 array of 100 000 values, text on both sides                     | 18.573 ms<br>27.3 MB/call           | **13.414 ms**<br>**1.7 MB**/call | **1.38x**<br>**-94%** |
-| twenty inserts in a transaction - 20 rows, one statement each, inside one transaction                  | 6.633 ms<br>**289 KB**/call         | **5.884 ms**<br>406 KB/call      | **1.13x**<br>+40%     |
+| point read - 1 row of 9 columns                                                                        | 0.288 ms<br>**26 KB**/call          | **0.251 ms**<br>28 KB/call       | **1.15x**<br>+8%      |
+| point read through the builder - the same row, selected with selectFrom().where() instead of a sql tag | 0.288 ms<br>**28 KB**/call          | **0.252 ms**<br>30 KB/call       | **1.15x**<br>+8%      |
+| page of 200 - 200 rows of 9 columns, mixed types                                                       | 0.656 ms<br>471 KB/call             | **0.531 ms**<br>**339 KB**/call  | **1.24x**<br>**-28%** |
+| concurrent reads - 20 reads at once of 1 row each, pool of 10                                          | 1.164 ms<br>**420 KB**/call         | **1.054 ms**<br>464 KB/call      | **1.10x**<br>+11%     |
+| int4[] of 100k, full width - 1 row holding 1 array of 100 000 values that use the whole type           | 21.859 ms<br>22.9 MB/call           | **5.545 ms**<br>**2.2 MB**/call  | **3.94x**<br>**-90%** |
+| float8 of 5k rows, full width - 5000 rows of 1 value, eight bytes against seventeen significant digits | 1.194 ms<br>1.4 MB/call             | **0.822 ms**<br>**1.2 MB**/call  | **1.45x**<br>**-13%** |
+| float8[] of 5k in one row - 1 row holding 1 array of the same 5000 values                              | 2.240 ms<br>2.8 MB/call             | **0.612 ms**<br>**226 KB**/call  | **3.66x**<br>**-92%** |
+| uuid of 5k rows - 5000 rows of 1 value, sixteen bytes against thirty-six characters                    | 1.294 ms<br>1.5 MB/call             | **0.950 ms**<br>1.5 MB/call      | **1.36x**<br>level    |
+| box of 5k rows - 5000 rows of 1 value, four float8s against coordinates that use them                  | 2.161 ms<br>1.9 MB/call             | **1.219 ms**<br>**1.9 MB**/call  | **1.77x**<br>**-2%**  |
+| bytea of 4MB - 1 row holding 1 value of 4 MB                                                           | 37.207 ms<br>51.6 MB/call           | **15.819 ms**<br>**4.1 MB**/call | **2.35x**<br>**-92%** |
+| insert one row - 1 row, six parameters                                                                 | 0.314 ms<br>**22 KB**/call          | **0.273 ms**<br>27 KB/call       | **1.15x**<br>+22%     |
+| insert 500 rows - 500 rows in 1 statement, 2500 parameters that fill their types                       | 4.398 ms<br>**1.3 MB**/call         | 4.309 ms<br>1.4 MB/call          | level<br>+7%          |
+| insert a 4MB bytea - 1 row holding 1 value of 4 MB - the clock is mostly the server                    | 17.322 ms<br>**2.6 MB**/call        | **15.038 ms**<br>2.7 MB/call     | **1.15x**<br>+3%      |
+| insert a 100k int4[] - 1 row holding 1 array of 100 000 values, text on both sides                     | 17.951 ms<br>27.2 MB/call           | **12.847 ms**<br>**993 KB**/call | **1.40x**<br>**-96%** |
+| twenty inserts in a transaction - 20 rows, one statement each, inside one transaction                  | 5.610 ms<br>**276 KB**/call         | **4.901 ms**<br>362 KB/call      | **1.14x**<br>+31%     |
 
-`kysely` 0.29.6, `postgrejs` 3.12.1, `pg` 8.23.0, PostgreSQL on loopback, Node 24.15.0. Medians; how
+`kysely` 0.29.6, `postgrejs` 3.13.0, `pg` 8.23.1, PostgreSQL on loopback, Node 24.15.0. Medians; how
 that was measured and how much each row can bear are in [How the numbers were
 measured](#how-the-numbers-were-measured).
 
@@ -240,21 +240,21 @@ What does not drift is _which_ of the two won each pair, so that is counted sepa
 
 | Scenario                        | pairs | postgrejs faster in | odds of that by luck |
 | ------------------------------- | ----- | ------------------- | -------------------- |
-| point read                      | 101   | 92                  | < 1 in 10^17         |
-| point read through the builder  | 101   | 95                  | < 1 in 10^20         |
-| page of 200                     | 101   | 78                  | < 1 in 10^7          |
-| concurrent reads                | 61    | 46                  | < 1 in 10^4          |
+| point read                      | 101   | 100                 | < 1 in 10^28         |
+| point read through the builder  | 101   | 100                 | < 1 in 10^28         |
+| page of 200                     | 101   | 93                  | < 1 in 10^18         |
+| concurrent reads                | 61    | 41                  | p = 0.010            |
 | int4[] of 100k, full width      | 41    | 41                  | < 1 in 10^12         |
-| float8 of 5k rows, full width   | 61    | 60                  | < 1 in 10^16         |
+| float8 of 5k rows, full width   | 61    | 61                  | < 1 in 10^18         |
 | float8[] of 5k in one row       | 61    | 61                  | < 1 in 10^18         |
-| uuid of 5k rows                 | 61    | 54                  | < 1 in 10^9          |
+| uuid of 5k rows                 | 61    | 57                  | < 1 in 10^12         |
 | box of 5k rows                  | 61    | 61                  | < 1 in 10^18         |
 | bytea of 4MB                    | 41    | 41                  | < 1 in 10^12         |
-| insert one row                  | 101   | 90                  | < 1 in 10^15         |
-| insert 500 rows                 | 61    | 55                  | < 1 in 10^10         |
-| insert a 4MB bytea              | 41    | 36                  | < 1 in 10^6          |
-| insert a 100k int4[]            | 41    | 40                  | < 1 in 10^10         |
-| twenty inserts in a transaction | 61    | 58                  | < 1 in 10^13         |
+| insert one row                  | 101   | 98                  | < 1 in 10^24         |
+| insert 500 rows                 | 61    | 38                  | not distinguishable  |
+| insert a 4MB bytea              | 41    | 40                  | < 1 in 10^10         |
+| insert a 100k int4[]            | 41    | 41                  | < 1 in 10^12         |
+| twenty inserts in a transaction | 61    | 59                  | < 1 in 10^14         |
 
 <!-- /bench:signtest -->
 
@@ -267,8 +267,8 @@ split a coin would produce is printed as level rather than rounded into a win.
 <!-- bench:binary -->
 
 Result columns arrive in PostgreSQL's binary format and are decoded per type, where `pg` asks for
-text and parses it. On bulk that is the whole difference: a 100k-element `int4[]` costs 7.9 ms and
-2.2 MB here against 26.1 ms and 22.7 MB, because the text path has to materialise the array literal
+text and parses it. On bulk that is the whole difference: a 100k-element `int4[]` costs 5.5 ms and
+2.2 MB here against 21.9 ms and 22.9 MB, because the text path has to materialise the array literal
 as one string before it can parse it.
 
 <!-- /bench:binary -->
@@ -278,16 +278,16 @@ as one string before it can parse it.
 PostgreJS names and caches a statement per connection - 64 by default, least-recently-used closed -
 so each distinct SQL string is parsed and planned once rather than on every call. `pg` prepares only
 a query it was given a name for, and Kysely does not give it one, so the same statement is parsed
-again on every call there. That is what the point read's 92 pairs of 101 is made of.
+again on every call there. That is what the point read's 100 pairs of 101 is made of.
 
 <!-- /bench:prepared -->
 
 <!-- bench:builder -->
 
-The query builder itself costs 2.5 KB a call over a `sql` tag here and 1.9 KB on `pg`, and nothing
+The query builder itself costs 1.7 KB a call over a `sql` tag here and 1.6 KB on `pg`, and nothing
 that separates from drift on the clock - Kysely's own compiler runs on both sides, so it is the same
-work paid once per driver rather than a difference between them. The same read is 1.17x through the
-tag and 1.16x through the builder.
+work paid once per driver rather than a difference between them. The same read is 1.15x through the
+tag and 1.15x through the builder.
 
 <!-- /bench:builder -->
 

@@ -359,7 +359,7 @@ function reading(results) {
 }
 
 function document(results) {
-  const { versions } = results;
+  const { versions, clientConfig } = results;
   const f = figures(results);
   return `# The same Kysely calls, on both dialects
 
@@ -386,6 +386,20 @@ ${wrap(`The dialect runs on its defaults, which is a choice worth stating: no \`
 \`int8\` arrives as PostgreJS decodes it rather than as \`pg\`'s string. Asking the server for text on
 a type changes both what crosses the socket and what gets decoded, so it would be a different
 measurement; \`dialectConfig\` in the results file records which one this was.`)}
+
+${wrap(
+  clientConfig?.asyncErrorHandling === false
+    ? `One client setting is not a default: the PostgreJS pool is opened with
+\`asyncErrorHandling: false\`. On, it captures a stack so a rejected query points at the line that
+called it rather than at a frame inside the client, and capturing costs CPU. \`pg\` offers nothing
+of the kind, so leaving it on would bill one side for a feature the comparison does not cover. It
+is not off because it changes the answer - measured in the drizzle round it is worth about 3% on
+the one scenario with several calls in flight at once, and nothing anywhere else. The results file
+records it as \`clientConfig\`.`
+    : `The PostgreJS pool is opened on the client's own defaults, \`asyncErrorHandling\` included -
+which is worth knowing, because that one captures a stack per call and \`pg\` has no equivalent to
+pay for.`,
+)}
 
 ## Method
 
