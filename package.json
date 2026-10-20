@@ -11,7 +11,7 @@
   "devDependencies": {
     "@panates/eslint-config": "^2.2.0",
     "@panates/eslint-config-ts": "^2.2.1",
-    "@panates/rman-preset": "^1.8.2",
+    "@panates/rman-preset": "^2.0.0",
     "@panates/tsconfig": "^2.1.7",
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.16.13",
