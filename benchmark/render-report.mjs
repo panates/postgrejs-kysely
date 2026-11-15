@@ -496,7 +496,7 @@ on every call, while PostgreJS names and caches one per connection and reuses it
 
 ${wrap(`The client underneath has its own benchmark against \`pg\` and \`postgres.js\`, on more scenarios
 than this - COPY, cursors, pooling, pipelining - in
-[\`postgrejs/doc/BENCHMARKS.md\`](https://github.com/panates/postgrejs/blob/master/doc/BENCHMARKS.md).
+[\`postgrejs/docs/BENCHMARKS.md\`](https://github.com/panates/postgrejs/blob/main/docs/BENCHMARKS.md).
 It measures the client; this measures the client through Kysely, so the two are not interchangeable
 and the numbers should not be read across. The same suite pointed through drizzle is in
 [\`drizzle-postgrejs\`](https://github.com/panates/postgrejs-drizzle/blob/master/doc/BENCHMARKS.md),
