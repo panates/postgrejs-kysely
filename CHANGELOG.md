@@ -1,6 +1,21 @@
 # Changelog
 
-<!-- rman:documented-up-to b60cfe166e126812c607076709c441756040d4ce -->
+<!-- rman:documented-up-to 27e4fae4f3c0e0cb5379c8f681433aa740010522 -->
+
+## v1.2.2 (2026-11-15)
+
+### 📚 Documentation
+
+- point the benchmark link at postgrejs's docs/ folder (36df419)
+
+### 🧹 Chores
+
+- sync lockfile (2d81134)
+- copyFiles in run.build.vars, @panates/rman-preset 2.0.0 (4cbfcf4)
+- **deps:** upgrade dependencies (1f8a1d1)
+- remove auto-changelog and ncu configs (f9463c9)
+
+---
 
 ## v1.2.1 (2026-10-06)
 
