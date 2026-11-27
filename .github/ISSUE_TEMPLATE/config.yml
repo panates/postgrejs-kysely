@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/panates/postgrejs-kysely/security/advisories/new
+    about: Report it privately through the Security tab, never in a public issue.
+  - name: A problem in the PostgreJS client itself
+    url: https://github.com/panates/postgrejs/issues
+    about: Decoding, the wire protocol, pooling and cursors live in that repository.
