@@ -25,6 +25,13 @@ npm-debug.log*
 /reports
 /test-*
 
+# graphify installs these per clone and writes absolute paths into them, so they
+# belong to the machine, not the repository. Left untracked they abort rman publish.
+.husky/post-checkout
+.husky/post-commit
+.husky/post-merge
+.husky/post-rewrite
+
 # Claude Code: .claude/settings.json is shared and committed, these are local
 # (.claude/local/ holds the handoff note between sessions)
 .claude/settings.local.json
