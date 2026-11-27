@@ -140,7 +140,7 @@ Chosen deliberately, and not worth re-opening without new evidence:
 `benchmark/` measures this dialect against Kysely's own `PostgresDialect` over `pg`, through Kysely
 on both sides, so the SQL is identical and only the driver differs. `pnpm run bench` measures and
 writes `benchmark/results/latest.json`; `pnpm run bench:report` renders that file into
-`doc/BENCHMARKS.md` and the README's `<!-- bench:… -->` regions, **prose included** - a sentence
+`docs/BENCHMARKS.md` and the README's `<!-- bench:… -->` regions, **prose included** - a sentence
 makes a claim and goes stale exactly like a number, so no figure is written by hand.
 
 Four rules the harness is built on, each of them a mistake someone already paid for:

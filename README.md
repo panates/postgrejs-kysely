@@ -16,7 +16,7 @@ ms against 37.2 ms, on 4.1 MB a call against 51.6 MB - `pg` reads that column as
 size, off the JS heap where a heap figure alone cannot see it. A 100k-element `int4[]` runs 3.9x, on
 2.2 MB against 22.9 MB. Ordinary queries gain less and gain it repeatably: a point read is the
 faster of the two in 100 of 101 alternated pairs. All of it measured through Kysely against Kysely's
-own `PostgresDialect` over `pg`, on the same server: [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md).
+own `PostgresDialect` over `pg`, on the same server: [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md).
 
 <!-- /bench:intro -->
 
@@ -296,7 +296,7 @@ baseline would be taken with both clients already up, so what a client allocates
 would sit under the window rather than in it. The figure is `heapUsed + external`, since a `bytea`
 arrives as a `Buffer` and lives outside the JS heap entirely.
 
-Run it yourself with `pnpm run bench`; [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) has the held-memory
+Run it yourself with `pnpm run bench`; [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) has the held-memory
 and high-water figures, the wire counts, and the rest of the method.
 
 ## Tested against Kysely's own suite
