@@ -190,7 +190,7 @@ nothing.
   adapter needs is missing, wrong or slower in `postgrejs`, do not patch around it in this package:
   no post-decode value rewriting, no shim, no vendored parser, no `pg`-compatibility table, no
   monkey-patching of the client, no "temporary" branch written to suit the behaviour as it is
-  today. Stop there and write the finding up as a task file in `../postgrejs/.claude/<short-name>.md`
+  today. Stop there and write the finding up as a task file in `../postgrejs/.claude/local/<short-name>.md`
   - what was asked of the client, what it answered, what it should answer, and the smallest
   reproduction that shows the difference. That repo's own session picks it up and fixes it at the
   source. Otherwise every adapter ends up carrying its own copy of the same correction, and the
