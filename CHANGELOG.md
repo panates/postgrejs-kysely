@@ -1,6 +1,36 @@
 # Changelog
 
-<!-- rman:documented-up-to 27e4fae4f3c0e0cb5379c8f681433aa740010522 -->
+<!-- rman:documented-up-to cdcf901c6a59d7d9b06d3f67030f0236e68dfee8 -->
+
+## v1.2.3 (2026-11-27)
+
+### 📚 Documentation
+
+- point at the postgrejs notes where they now live (5c26440)
+- add the security policy, code of conduct and issue templates (e0a39b8)
+- move doc/ to docs/ (86da877)
+
+### 📦 Build System
+
+- install and publish with pnpm (0012140)
+
+### 🤖 Continuous Integration
+
+- guard main, declare the test job's permissions and move coverage to the release (9c803d0)
+
+### 🧹 Chores
+
+- sync lockfile [skip ci] (cdd4227)
+- share the Claude settings and keep session notes local (7a0c720)
+- bring the shared config files back to the preset templates (0223a9a)
+- ignore the graphify git hooks (c443254)
+- **deps:** catch the manifest ranges up with what is installed (2bd33f2)
+
+### 💬 General Changes
+
+- Merge pull request #9 from panates/chore/standards (d544682)
+
+---
 
 ## v1.2.2 (2026-11-15)
 
