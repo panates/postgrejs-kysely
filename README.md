@@ -296,7 +296,7 @@ baseline would be taken with both clients already up, so what a client allocates
 would sit under the window rather than in it. The figure is `heapUsed + external`, since a `bytea`
 arrives as a `Buffer` and lives outside the JS heap entirely.
 
-Run it yourself with `npm run bench`; [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) has the held-memory
+Run it yourself with `pnpm run bench`; [`doc/BENCHMARKS.md`](doc/BENCHMARKS.md) has the held-memory
 and high-water figures, the wire counts, and the rest of the method.
 
 ## Tested against Kysely's own suite
@@ -414,16 +414,16 @@ The unit tests need nothing; the live ones need a PostgreSQL at `127.0.0.1:5432`
 `PGDATABASE` override.
 
 ```sh
-npm test          # unit + live tests
-npm run citest    # the same, with coverage
-npm run typecheck # type check without emitting
+pnpm test          # unit + live tests
+pnpm run citest    # the same, with coverage
+pnpm run typecheck # type check without emitting
 rman lint         # eslint, with the organization's flags
 rman check        # circular dependencies
 rman build        # compile into build/, ready to publish
 
 scripts/run-kysely-suite.sh   # Kysely's own suite, on its own database
-npm run bench                 # the benchmark, against pg through Kysely
-npm run bench:report          # render the last run into the docs
+pnpm run bench                 # the benchmark, against pg through Kysely
+pnpm run bench:report          # render the last run into the docs
 ```
 
 The tests come in two kinds, and the split is deliberate:

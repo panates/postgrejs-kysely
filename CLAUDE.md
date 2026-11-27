@@ -138,8 +138,8 @@ Chosen deliberately, and not worth re-opening without new evidence:
 ## Benchmarks
 
 `benchmark/` measures this dialect against Kysely's own `PostgresDialect` over `pg`, through Kysely
-on both sides, so the SQL is identical and only the driver differs. `npm run bench` measures and
-writes `benchmark/results/latest.json`; `npm run bench:report` renders that file into
+on both sides, so the SQL is identical and only the driver differs. `pnpm run bench` measures and
+writes `benchmark/results/latest.json`; `pnpm run bench:report` renders that file into
 `doc/BENCHMARKS.md` and the README's `<!-- bench:… -->` regions, **prose included** - a sentence
 makes a claim and goes stale exactly like a number, so no figure is written by hand.
 
@@ -214,7 +214,7 @@ nothing.
 ## Local setup
 
 PostgreSQL runs on `127.0.0.1:5432` (`postgres`/`postgres`, database `postgres`) from the docker compose
-in the PostgreJS repo - that is what `npm test`'s live tests use.
+in the PostgreJS repo - that is what `pnpm test`'s live tests use.
 
 `scripts/run-kysely-suite.sh` runs Kysely's own dialect suite against this dialect: it checks Kysely out,
 points its `postgres` variant at us (`scripts/kysely-suite.patch`), and uses Kysely's own compose
