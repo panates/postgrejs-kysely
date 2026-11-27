@@ -207,6 +207,9 @@ nothing.
   once.
 - Claims about how another library behaves get checked against that library's own source, not its
   documentation.
+- A session that stops with work in flight leaves the handoff note at `.claude/local/handoff.md`, and
+  a session that starts reads it first. Everything under `.claude/local/` is ignored by git - that is
+  where this repository's own session notes live, next to the benchmark write-ups already there.
 
 ## Local setup
 
