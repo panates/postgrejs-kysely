@@ -138,9 +138,9 @@ Chosen deliberately, and not worth re-opening without new evidence:
 ## Benchmarks
 
 `benchmark/` measures this dialect against Kysely's own `PostgresDialect` over `pg`, through Kysely
-on both sides, so the SQL is identical and only the driver differs. `npm run bench` measures and
-writes `benchmark/results/latest.json`; `npm run bench:report` renders that file into
-`doc/BENCHMARKS.md` and the README's `<!-- bench:… -->` regions, **prose included** - a sentence
+on both sides, so the SQL is identical and only the driver differs. `pnpm run bench` measures and
+writes `benchmark/results/latest.json`; `pnpm run bench:report` renders that file into
+`docs/BENCHMARKS.md` and the README's `<!-- bench:… -->` regions, **prose included** - a sentence
 makes a claim and goes stale exactly like a number, so no figure is written by hand.
 
 Four rules the harness is built on, each of them a mistake someone already paid for:
@@ -207,11 +207,14 @@ nothing.
   once.
 - Claims about how another library behaves get checked against that library's own source, not its
   documentation.
+- A session that stops with work in flight leaves the handoff note at `.claude/local/handoff.md`, and
+  a session that starts reads it first. Everything under `.claude/local/` is ignored by git - that is
+  where this repository's own session notes live, next to the benchmark write-ups already there.
 
 ## Local setup
 
 PostgreSQL runs on `127.0.0.1:5432` (`postgres`/`postgres`, database `postgres`) from the docker compose
-in the PostgreJS repo - that is what `npm test`'s live tests use.
+in the PostgreJS repo - that is what `pnpm test`'s live tests use.
 
 `scripts/run-kysely-suite.sh` runs Kysely's own dialect suite against this dialect: it checks Kysely out,
 points its `postgres` variant at us (`scripts/kysely-suite.patch`), and uses Kysely's own compose

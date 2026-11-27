@@ -1,5 +1,5 @@
 /**
- * Renders the last `npm run bench` into `doc/BENCHMARKS.md` and into the
+ * Renders the last `npm run bench` into `docs/BENCHMARKS.md` and into the
  * marked regions of `README.md`.
  *
  * The tables and the paragraphs are both generated, and the second half
@@ -19,7 +19,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 
 const RESULTS = new URL('./results/latest.json', import.meta.url);
-const DOC = new URL('../doc/BENCHMARKS.md', import.meta.url);
+const DOC = new URL('../docs/BENCHMARKS.md', import.meta.url);
 const README = new URL('../README.md', import.meta.url);
 
 const CONTROL = 'node-postgres';
@@ -533,7 +533,7 @@ heap figure alone cannot see it. A 100k-element \`int4[]\` runs ${f.arrayRatio}x
 ${f.arrayDriverHeap} against ${f.arrayControlHeap}. Ordinary queries gain less and gain it
 repeatably: a point read is the faster of the two in ${f.pointWins} of ${f.pointPairs} alternated
 pairs. All of it measured through Kysely against Kysely's own \`PostgresDialect\` over \`pg\`, on the
-same server: [\`doc/BENCHMARKS.md\`](doc/BENCHMARKS.md).`),
+same server: [\`docs/BENCHMARKS.md\`](docs/BENCHMARKS.md).`),
 );
 readme = replaceRegion(
   readme,
@@ -584,5 +584,5 @@ through the builder.`),
 await writeFile(README, readme);
 
 console.log(
-  `doc/BENCHMARKS.md and README.md rendered from a run of ${results.measuredAt}`,
+  `docs/BENCHMARKS.md and README.md rendered from a run of ${results.measuredAt}`,
 );
