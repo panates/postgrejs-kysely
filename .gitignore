@@ -1,12 +1,14 @@
+# Dependencies
 node_modules
-/build
-*.tsbuildinfo
-.claude
-graphify-out
-/test-*
 
-# environment variables
+# Build output
+build/
+*.tsbuildinfo
+
+# Environment variables: only an example file is committed
 .env
+.env.*
+!.env.example
 .development.env
 
 # Logs
@@ -19,13 +21,29 @@ npm-debug.log*
 
 # Tests
 /coverage
-/reports
 /.nyc_output
+/reports
+/test-*
+
+# graphify installs these per clone and writes absolute paths into them, so they
+# belong to the machine, not the repository. Left untracked they abort rman publish.
+.husky/post-checkout
+.husky/post-commit
+.husky/post-merge
+.husky/post-rewrite
+
+# Claude Code: .claude/settings.json is shared and committed, these are local
+# (.claude/local/ holds the handoff note between sessions)
+.claude/settings.local.json
+.claude/worktrees/
+.claude/local/
+graphify-out
 
 # IDEs and editors
 /.idea
 .project
 .classpath
+.c9/
 *.launch
 .settings/
 *.sublime-workspace
