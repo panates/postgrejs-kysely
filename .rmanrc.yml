@@ -1,5 +1,9 @@
 extends: '@panates/rman-preset'
 
+# Install, sync the lockfile and publish with pnpm.
+packageManager:
+  node: pnpm
+
 # This package has shipped its CHANGELOG.md in the tarball since 1.0.0, on
 # top of the README.md and LICENSE the preset's build copies. A selector
 # block, because the preset declares the build under `[platform:node]` >
